@@ -2985,7 +2985,8 @@ function buildLive(){
 //   building은 배포 계산 서버(Lambda 레포 infra/sim, 웹 /api/sim/*)가 임시 폴더에 써서 계산. 로컬 tools/sim-server.mjs는 400으로 거절
 async function simCompare(scenario, useLive){
   if (HOST_PLAN && !DATA.building) throw new Error('대시보드에서 평면도를 받지 못해 계산할 수 없습니다.');
-  const where = HOST_PLAN ? { building:DATA.building } : { data:DATA_BASE };
+  // buildingId: 대시보드 건물 ID. 계산 서버가 이 ID로 운영 시간(대시보드 건물 설정)을 찾음(도면 안 building.id는 변환 때 붙은 값이라 다를 수 있음)
+  const where = HOST_PLAN ? { building:DATA.building, ...(BUILDING_ID ? { buildingId:BUILDING_ID } : {}) } : { data:DATA_BASE };
   const r = await fetch('/api/sim/compare', { method:'POST', headers:{ 'Content-Type':'application/json' },
     body:JSON.stringify({ ...where, scenario:{ mode:simMode(), ...scenario }, ...(useLive ? { live:buildLive() } : {}) }) });
   const j = await r.json().catch(() => null);
