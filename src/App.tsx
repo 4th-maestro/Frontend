@@ -17,7 +17,6 @@ import { comfortOf, comfortText } from './comfort'
 import { setRoomSetpoint, summarize } from './mock'
 import AnomalyPanel from './panels/AnomalyPanel'
 import PowerTrend from './panels/PowerTrend'
-import RecommendPanel from './panels/RecommendPanel'
 import ScheduleTimeline from './panels/ScheduleTimeline'
 import SimPanel from './panels/SimPanel'
 import TwinTools from './panels/TwinTools'
@@ -520,9 +519,9 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
                   onSend={send} onClear={clear} onSave={save}
                   onClose={(m) => { setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, draftState: 'closed' as const } : x))); setFocus(NO_IDS) }}
                   onFocus={setFocus} onSelect={setSelected}
+                  recommend={{ building, floor, refreshKey: scheduleKey, onDraft: showDraft, onLocate: locate }}
                 />}
                 {ops && floor && <AnomalyPanel building={building} floor={floor} onLocate={(id) => { setMode('anomaly'); locate(id) }} />}
-                {ops && floor && <RecommendPanel key={`${floor}-${scheduleKey}`} building={building} floor={floor} onDraft={showDraft} onLocate={locate} />}
               </aside>
             </main>
           </>
