@@ -143,16 +143,18 @@ export function onBuildingRendered(handler: (building: unknown) => void) {
 
 // 운전 시뮬레이션(EnergyPlus): 트윈이 계산하고 결과를 보내면 대시보드 패널에 그림 (트윈 안 패널은 작아서 옮김)
 // period: 'now' = 지금부터 durH시간(기준 = 현재 설정 유지 예측), 'range' = 시작·끝 시각 지정(기준 = 오늘 실제 운전 또는 기존 운전)
-export type SimForm = { coolSetpoint: number | string; start: string; end: string; offWhenEmpty: boolean; precoolMin: number | string; useLive: boolean; period: 'now' | 'range'; durH: number | string }
+export type SimForm = { mode?: 'cool' | 'heat'; coolSetpoint: number | string; start: string; end: string; offWhenEmpty: boolean; precoolMin: number | string; useLive: boolean; period: 'now' | 'range'; durH: number | string }
 type WinSide = { kwh: number; won: number; avgT: number | null; maxT: number | null }
-export type SimWindow = { from: number; to: number; hours: number; label: string; clipped: boolean; setpoint: number; base: WinSide; scenario: WinSide; savedKwh: number; savedWon: number; savedPct: number; afterSavedKwh: number }
+export type SimWindow = { from: number; to: number; hours: number; label: string; clipped: boolean; setpoint: number; base: WinSide; scenario: WinSide; savedKwh: number; savedWon: number; savedPct: number | null; afterSavedKwh: number }
 type Kpi = { elecKwh: number; costWon: number; tdisKhPerZone: number; ppd: number; uncomfortPct: number; hottest?: { tempC: number; room: string } }
-type Scen = { coolSetpoint: number; hours: string[]; offWhenEmpty?: boolean; precoolMin?: number }
+// coolSetpoint = 설정온도 (난방 모드면 난방 설정온도. 필드 이름은 트윈·서버와 호환을 위해 그대로)
+export type SimMode = 'cool' | 'heat'
+type Scen = { mode?: SimMode; coolSetpoint: number; hours: string[]; offWhenEmpty?: boolean; precoolMin?: number }
 export type SimRoom = { id: string; name: string; floor: string; maxT: number; avgT: number; baseAvgT?: number; ppd: number; basePpd?: number; kwh: number; baseKwh?: number }
 export type SimState = {
-  form: SimForm; base: Scen; hasLive: boolean; occ: string; busy: boolean; msg: string; scope: string
+  mode?: SimMode; form: SimForm; base: Scen; hasLive: boolean; occ: string; busy: boolean; msg: string; scope: string
   result: null | {
-    window: SimWindow | null; baseName: string
+    mode?: SimMode; window: SimWindow | null; baseName: string
     live: { date: string; day: string; now: number; weather: { min: number; max: number } } | null; weather: string; days: number; engine: string
     compare: { savedKwh: number; savedPct: number; savedWon: number; tdisChange: number; ppdChange: number }
     restOfDay: { fromHour: number; savedKwh: number; savedWon: number } | null
