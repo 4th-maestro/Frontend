@@ -227,14 +227,17 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
     if (sim && flowOn) postUi(frame.current, 'flow:off')
     if (sim && pipesOn) postUi(frame.current, 'pipes')
   }, [sim, ops, persona, flowOn, pipesOn])
-  // 채팅 what-if: 트윈이 EnergyPlus로 계산한 결과를 '계산 중' 메시지 자리에 답변 + 설정온도 초안으로 바꿔 넣음
+  // 채팅 what-if: 트윈의 계산 결과를 '계산 중' 메시지 자리에 답변 + 설정온도 초안으로 바꿔 넣음
+  //   즉시(5R1C, 수십 ms) 답이 먼저 오고, 계산 서버가 있으면 정밀(EnergyPlus) 답이 한 번 더 와서 바꿈
   const whatIfs = useRef(new Map<string, WhatIf>())
   useEffect(() => onTwinSimAnswer((a) => {
     const w = whatIfs.current.get(a.id)
     if (!w) return
-    whatIfs.current.delete(a.id)
+    if (a.stage !== 'fast') whatIfs.current.delete(a.id)
+    // 즉시 답이 이미 있는데 정밀 계산만 실패했으면 즉시 답을 그대로 둠
+    if (!a.ok && a.stage === 'final') { setMessages((ms) => ms.map((m) => (m.id !== a.id || m.draft ? m : { ...m, text: answerText(w, a) }))); return }
     setMessages((ms) => ms.map((m) => (m.id !== a.id ? m : a.ok && a.window
-      ? { ...m, text: answerText(w, a), draft: draftOf(w, a), draftState: 'pending' as const }
+      ? { ...m, text: answerText(w, a), draft: draftOf(w, a), draftState: m.draftState === 'saved' || m.draftState === 'closed' ? m.draftState : 'pending' as const }
       : { ...m, text: answerText(w, a) })))
   }), [])
 

@@ -288,9 +288,31 @@ DigitalTwin.ingest(snapshot);
   - 건물 목록도 트윈을 따릅니다: `data/buildings.json`(6공학관 `eng6`, 부산역 역사 `busan-station`). 대시보드가 `?building=<id>`로 열면 그 건물 폴더를 읽습니다.
   - 대시보드의 **건물 추가하기**: 도면 이미지를 넣고 파이프라인에서 **트윈에서 렌더링**을 누르면 그때부터 그 건물 데이터가 만들어집니다. 그 전에는 만들지 않습니다.
   - **채팅 what-if**: AI 도우미에 "3층 강의실 18도로 낮추면?"처럼 물으면 대시보드가 `{source:'maestro', type:'simAsk', id, rooms, setpoint, hours}`를 보냅니다.
-    - 트윈은 그 방들만 지금부터 N시간(기본 2시간) 설정을 바꿔 EnergyPlus로 계산합니다. 기준은 현재 설정 유지 예측이고, 서버에는 `scenario.window.rooms`로 전달됩니다.
-    - 결과는 `{source:'twin', type:'simAnswer', id, ok, mode, window}`로 돌려줍니다. 대시보드는 답변과 설정온도 스케줄 초안을 대화에 넣습니다.
+    - 트윈은 그 방들만 지금부터 N시간(기본 2시간) 설정을 바꿔 계산합니다. 기준은 현재 설정 유지 예측입니다.
+    - 두 번 답합니다(노션 3차 초안 설계: what-if는 5R1C, EnergyPlus는 오프라인 보정).
+      1. `stage:'fast'`: 브라우저에서 **5R1C**(ISO 13790, `pipeline/rc5.js`)로 수십 ms 안에 계산하고, EnergyPlus 대비 검증 오차(`accuracy`)를 같이 보냅니다.
+      2. `stage:'final'`: 계산 서버가 있으면 EnergyPlus로 다시 계산해 바꿉니다(서버에는 `scenario.window = {from, to, sp, rooms}`, 6초 안팎). 즉시 값은 `fast`에 남깁니다. 서버가 없으면 `onlyFast:true`로 5R1C 값만 확정합니다.
+    - 결과는 `{source:'twin', type:'simAnswer', id, ok, stage, engine, mode, window, ms, accuracy, fast, onlyFast}`입니다. 대시보드는 답변과 설정온도 스케줄 초안을 대화에 넣고, 최종 답이 오면 같은 메시지를 고칩니다.
     - 시뮬레이션 패널의 결과는 바꾸지 않습니다.
+
+### 5R1C 보정 (EnergyPlus 기준)
+
+```
+node tools/calibrate-5r1c.mjs data/      # → data/rc5-calibration.json
+```
+
+- 방마다 EnergyPlus 모델과 같은 형상·재료로 5R1C 계수를 만듭니다(외벽 U≈0.38, 지붕 0.40, 창 1.8·SHGC 0.40, 열용량 165 kJ/m²K). 15분 간격, 3일 예열 후 하루를 계산합니다.
+- 난방·냉방을 따로 보정합니다. 날씨가 다른 **보정일 3일**에서 계수 배율(열용량·외피·일사·질량–표면 결합)과 전력 배율을 격자로 고르고, 쓰지 않은 **검증일 2일**에서 오차를 잽니다.
+- 목표는 시간별 전력 모양, 실온, **설정 변경 반응**(전 실 2시간 +2°C일 때 전력 변화)을 함께 맞추는 것입니다. what-if 답은 결국 '바꿨을 때의 차이'이기 때문입니다.
+- 합격 기준: ASHRAE Guideline 14 시간 단위 CV(RMSE) ≤ 30%, NMBE ±10%.
+- 6공학관 결과(검증일):
+
+| 모드 | CV(RMSE) | NMBE | 실온 RMSE | 설정 변경 반응 오차 | 판정 |
+|---|---|---|---|---|---|
+| 난방 | 25.7% | −0.3% | 0.56°C | −14% | 합격 |
+| 냉방 | 7.2% | 3.0% | 0.08°C | −1.2% | 합격 |
+
+- 보정 파일이 없는 건물(부산역, 도면 편집 중인 건물)은 기본 계수로 계산하고 답에 '보정 전 기본 계수'라고 표시합니다.
 - 대시보드 없이 혼자 열면 받은 값이 없으므로 도면만 보입니다. `postMessage`·`DigitalTwin.ingest`로 넣으면 그때부터 그립니다.
 
 ### 스냅샷 형식 (twin.realtime/v1)

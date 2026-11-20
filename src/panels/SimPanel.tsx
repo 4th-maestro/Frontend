@@ -122,7 +122,7 @@ export default function SimPanel({ frame, onLocate }: { frame: () => HTMLIFrameE
                     <p className="sim-note">구간이 끝난 뒤 오늘 끝까지 {sign(W.afterSavedKwh)}kWh (설정을 되돌리면 실온을 다시 맞추느라 전력이 늘 수 있음)</p>
                   </>
                 )}
-                <Table head={[W ? '하루 전체 · 기준' : R.live ? '오늘 실제' : '기존', `선택 ${R.scenario.scenario.coolSetpoint}°C`]} rows={[
+                <Table head={[W ? '하루 전체 · 기준' : R.live ? '오늘 실제' : '기존', `선택 ${W ? W.setpoint : R.scenario.scenario.coolSetpoint}°C`]} rows={[
                   [`${MK} 전력`, R.baseline.kpi.elecKwh, R.scenario.kpi.elecKwh, 'kWh'], ['전기요금', R.baseline.kpi.costWon, R.scenario.kpi.costWon, '원'],
                   ['재실 평균 실온', R.baseline.avgT, R.scenario.avgT, '°C'], ...(heat ? [] : [['가장 더운 실', R.baseline.kpi.hottest?.tempC, R.scenario.kpi.hottest?.tempC, '°C'] as Row]),
                   ['열 불쾌도', R.baseline.kpi.tdisKhPerZone, R.scenario.kpi.tdisKhPerZone, 'K·h/실'], ['불만족 PPD', R.baseline.kpi.ppd, R.scenario.kpi.ppd, '%'],

@@ -604,10 +604,11 @@ async function loadTwinData(){
   const pre = window.TWIN_DATA || {};
   if (HOST_PLAN) { const b = await hostBuilding(BUILDING_ID); if (b) { DATA.building = b; DATA_FROM.building = '대시보드 (저장된 평면도)'; } }
   // 추가한 건물엔 그 건물 시간표·시뮬레이션이 없음 → 공용(기상·요금)만 읽음
-  const kinds = ADDED ? ['weather', 'tariff'] : ['building', 'maintenance', 'schedule', 'weather', 'tariff', 'simulation', 'scenario'];
+  // rc5-calibration = 5R1C ↔ EnergyPlus 보정 계수 (tools/calibrate-5r1c.mjs) — 도면을 고친 건물엔 맞지 않으니 읽지 않음
+  const kinds = ADDED ? ['weather', 'tariff'] : ['building', 'maintenance', 'schedule', 'weather', 'tariff', 'simulation', 'scenario', 'rc5-calibration'];
   // 파일마다 순서대로 기다리지 않고 동시에 조회
   await Promise.all(kinds.map(async k => {
-    if (DATA[k] || (EDITED && ['maintenance', 'schedule', 'simulation', 'scenario'].includes(k))) return;
+    if (DATA[k] || (EDITED && ['maintenance', 'schedule', 'simulation', 'scenario', 'rc5-calibration'].includes(k))) return;
     let v = null;
     try { const ss = params.has('data') || params.has('building') ? null : sessionStorage.getItem('twin:' + k); if (ss) { v = JSON.parse(ss); DATA_FROM[k] = '직접 넣은 파일'; } } catch {}
     if (!v && pre[k]) { v = pre[k]; DATA_FROM[k] = '페이지 설정'; }
@@ -2429,7 +2430,7 @@ const fmt1 = v => v == null || !isFinite(v) ? '–' : (+v).toLocaleString('ko-KR
 function simAvgT(res){ let t = 0, a = 0; for (const [id, x] of Object.entries(res.rooms || {})) if (x.avgTempC != null) { const ar = ROOM[id]?.area || 1; t += x.avgTempC * ar; a += ar; } return a ? t / a : null; }
 function scenLine(r){
   const R = SIM.result, x = R?.scenario?.rooms?.[r.id], b = R?.baseline?.rooms?.[r.id]; if (!x) return '';
-  return `<div class="sub" style="margin-top:4px">운전 시뮬레이션(${esc(R.scenario.scenario.coolSetpoint + '°C')}): 재실 중 평균 <b>${fmt1(x.avgTempC)}°C</b> · 최고 <b>${fmt1(x.maxTempC)}°C</b> · PPD ${fmt1(x.ppd)}% <span style="opacity:.7">(기존 ${fmt1(b?.avgTempC)}°C · ${fmt1(b?.ppd)}%)</span></div>`; }
+  return `<div class="sub" style="margin-top:4px">운전 시뮬레이션(${esc((R.scenario.scenario.window?.sp ?? R.scenario.scenario.coolSetpoint) + '°C')}): 재실 중 평균 <b>${fmt1(x.avgTempC)}°C</b> · 최고 <b>${fmt1(x.maxTempC)}°C</b> · PPD ${fmt1(x.ppd)}% <span style="opacity:.7">(기존 ${fmt1(b?.avgTempC)}°C · ${fmt1(b?.ppd)}%)</span></div>`; }
 const simBase = () => SIM.result?.baseline?.scenario?.mode === simMode() ? SIM.result.baseline.scenario
   : { mode:simMode(), coolSetpoint:simMode() === 'heat' ? BD.operation?.heatSetpoint ?? 20 : BD.operation?.coolSetpoint ?? 24, hours:BD.operation?.weekday || ['08:00', '21:00'] };
 // 설정온도 범위: 냉방 22~28, 난방 18~26 · 처음 값 = 절감 쪽으로 2°C (냉방 올림, 난방 내림)
@@ -2475,14 +2476,26 @@ async function simRun(){
 }
 // 채팅 what-if: 대시보드 AI 도우미가 "3층 강의실 18도로 낮추면?"을 보내면 그 방들만 지금부터 N시간 설정을 바꿔 EnergyPlus로 계산하고 결과만 돌려줌
 //   시뮬레이션 패널의 결과(SIM.result)는 건드리지 않음
+//   1단계 즉시: 5R1C(pipeline/rc5.js)를 이 브라우저에서 바로 계산 (수십 ms, 서버 없음 — 노션 설계의 what-if 경로). 보정 계수가 있으면 EnergyPlus 대비 오차도 같이 보냄
+//   2단계 정밀: 계산 서버가 있으면 EnergyPlus로 다시 계산해 답을 바꿈 (10초 안팎). 서버가 없거나 브라우저 저장 건물이면 즉시 값만
+let RC5 = null;
 async function simAsk(m){
-  const ids = (m.rooms || []).filter(id => ROOM[id]);
+  const ids = (m.rooms || []).filter(id => ROOM[id]), send = x => emit('simAnswer', { source:'twin', id:m.id, ...x });
+  if (!ids.length) return send({ ok:false, stage:'final', error:'3D 트윈에 없는 호실이에요' });
+  if (!hasLive()) return send({ ok:false, stage:'final', error:'오늘 실측 기록이 아직 없어요. 잠시 뒤 다시 물어 주세요' });
+  let fast = null;
   try {
-    if (!ids.length) throw new Error('3D 트윈에 없는 호실이에요');
-    if (!hasLive()) throw new Error('오늘 실측 기록이 아직 없어요. 잠시 뒤 다시 물어 주세요');
+    RC5 ||= await Promise.all([import('./pipeline/rc5.js'), import('./pipeline/live-day.js')]);
+    const [{ whatIf }, { liveDay, liveBaseline }] = RC5, L = liveDay(BD, buildLive(), { schedule:DATA.schedule });
+    fast = whatIf(BD, L, liveBaseline(BD, L, simMode()), { rooms:ids, setpoint:+m.setpoint, hours:+m.hours || 2, tariff:DATA.tariff, calib:DATA['rc5-calibration'] });
+    send({ ok:true, stage:'fast', engine:'5R1C', mode:fast.mode, window:fast.window, ms:fast.ms, accuracy:fast.accuracy });
+  } catch (e) { console.warn('[twin] 5R1C 즉시 계산 실패', e); }
+  try {
     const j = await simCompare({ name:'AI what-if', coolSetpoint:+m.setpoint, window:{ hours:+m.hours || 2, rooms:ids } }, true);
-    emit('simAnswer', { source:'twin', id:m.id, ok:true, mode:j.mode || 'cool', window:j.window, calibration:j.calibration?.factor ?? 1, engine:j.scenario.engine, seconds:j.scenario.run?.seconds ?? null });
-  } catch (e) { emit('simAnswer', { source:'twin', id:m.id, ok:false, error:e.message || String(e) }); }
+    send({ ok:true, stage:'final', engine:j.scenario.engine, mode:j.mode || 'cool', window:j.window, calibration:j.calibration?.factor ?? 1, seconds:j.scenario.run?.seconds ?? null,
+      fast:fast ? { savedKwh:fast.window.savedKwh, savedWon:fast.window.savedWon, ms:fast.ms } : null });
+  } catch (e) { send(fast ? { ok:true, stage:'final', engine:'5R1C', onlyFast:true, mode:fast.mode, window:fast.window, ms:fast.ms, accuracy:fast.accuracy, note:e.message || String(e) }
+    : { ok:false, stage:'final', error:e.message || String(e) }); }
 }
 // 대시보드의 '운전 시뮬레이션' 패널로 보내는 상태 (트윈 안 패널은 작아서 대시보드 쪽에 그림)
 function simReport(force){
@@ -2521,7 +2534,7 @@ function renderSim(force){
         ${RD ? `지금(${RD.fromHour}시)부터 오늘 끝까지 <b class="inline">${fmt1(RD.savedKwh)} kWh · ${won(RD.savedWon)}</b><br>` : ''}
         불쾌도 ${c.tdisChange > 0 ? '+' : ''}${fmt1(c.tdisChange)} K·h/실 · 불만족(PPD) ${c.ppdChange > 0 ? '+' : ''}${fmt1(c.ppdChange)}%p</div>
       ${K ? `<div class="msg pad" title="${esc(K.note)}">실측 보정 ×${fmt1(K.factor)} · 지난 ${K.hours}시간 실측 실내기 전력 ${fmt1(K.measuredKwh)}kWh 기준${K.cvrmsePct != null ? ` · 시간별 오차 CV(RMSE) ${fmt1(K.cvrmseRawPct)}% → ${fmt1(K.cvrmsePct)}%` : ''} · 재실 ${esc(OCC_SRC[R.live?.occSource] || '실측')}</div>` : ''}
-      <table class="simt"><thead><tr><th></th><th>${L ? '오늘 실제' : '기존'}<small>${L ? `평균 ${bs.coolSetpoint}°C · 실별 기록` : `${bs.coolSetpoint}°C · ${bs.hours.join('~')}`}</small></th><th>선택<small>${sc.coolSetpoint}°C · ${sc.hours.join('~')}${sc.offWhenEmpty ? ' · 빈시간 OFF' : ''}${sc.precoolMin ? ` · 사전 ${sc.precoolMin}분` : ''}</small></th></tr></thead><tbody>
+      <table class="simt"><thead><tr><th></th><th>${L ? '오늘 실제' : '기존'}<small>${L ? `평균 ${bs.coolSetpoint}°C · 실별 기록` : `${bs.coolSetpoint}°C · ${bs.hours.join('~')}`}</small></th><th>선택<small>${sc.window?.sp ?? sc.coolSetpoint}°C · ${sc.hours.join('~')}${sc.offWhenEmpty ? ' · 빈시간 OFF' : ''}${sc.precoolMin ? ` · 사전 ${sc.precoolMin}분` : ''}</small></th></tr></thead><tbody>
         ${row(`${MK} 전력`, B.elecKwh, S.elecKwh, 'kWh', true)}${row('전기요금', B.costWon, S.costWon, '원', true)}
         ${row('예상 실온(재실 평균)', simAvgT(R.baseline), simAvgT(R.scenario), '°C', true)}${H ? '' : row('가장 더운 실', B.hottest?.tempC, S.hottest?.tempC, '°C', true)}
         ${row('열 불쾌도 tdis', B.tdisKhPerZone, S.tdisKhPerZone, 'K·h/실', true)}${row('불만족 PPD', B.ppd, S.ppd, '%', true)}${row('|PMV|>0.5 비율', B.uncomfortPct, S.uncomfortPct, '%', true)}

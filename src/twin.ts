@@ -171,8 +171,10 @@ export function onTwinSim(handler: (s: SimState) => void) {
   window.addEventListener('message', listener)
   return () => window.removeEventListener('message', listener)
 }
-// 채팅 what-if 결과 (트윈이 EnergyPlus로 계산): window = 계산 구간·절감·대상 호실 평균 실온
-export type SimAnswer = { id: string; ok: boolean; error?: string; mode?: SimMode; window?: SimWindow; calibration?: number; engine?: string; seconds?: number | null }
+// 채팅 what-if 결과: stage 'fast' = 5R1C 즉시 계산(브라우저, 수십 ms), 'final' = EnergyPlus 정밀 계산(서버) 또는 서버가 없을 때 5R1C 그대로(onlyFast)
+// window = 계산 구간·절감·대상 호실 평균 실온, accuracy = 5R1C의 EnergyPlus 대비 검증 오차(tools/calibrate-5r1c.mjs)
+export type SimAnswer = { id: string; ok: boolean; stage?: 'fast' | 'final'; error?: string; mode?: SimMode; window?: SimWindow; calibration?: number; engine?: string; seconds?: number | null; ms?: number
+  accuracy?: { cvrmsePct: number | null; nmbePct: number | null; tempRmseC: number | null; pass: boolean } | null; fast?: { savedKwh: number; savedWon: number; ms: number } | null; onlyFast?: boolean; note?: string }
 export function onTwinSimAnswer(handler: (a: SimAnswer) => void) {
   const listener = (e: MessageEvent) => {
     if (!TWIN_URL || e.origin !== twinOrigin() || e.data?.source !== 'twin' || e.data.type !== 'simAnswer') return
