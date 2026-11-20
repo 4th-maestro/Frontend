@@ -1,5 +1,5 @@
 import { Suspense, lazy, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CalendarClock, Droplets, Info, Moon, RefreshCw, Sun, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarClock, Droplets, Info, Moon, RefreshCw, Sun, Zap } from 'lucide-react'
 import AdminPage from './admin/AdminPage'
 import ChatPanel, { type ChatMsg } from './ai/ChatPanel'
 import type { AskResult } from './ai/types'
@@ -246,7 +246,8 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   // 선택된 층이 현재 건물의 층 목록에서 사라지면 건물 보기로 돌아감
   if (status && floor && !floors.includes(floor)) setFloor('')
   // 트윈 화면이 없으면 빈 층(새로고침 직후 빈 도면) 대신 첫 층 표시
-  if (!twinOn && !floor && floors.length) setFloor(floors[0])
+  // 판단 대기(twinWait) 중에는 고르지 않음: 트윈 건물이면 건물 보기(빈 층)로 시작해야 트윈과 앱 층이 일치
+  if (!twinOn && !twinWait && !floor && floors.length) setFloor(floors[0])
   // 새 AI 결과: 대화에 추가, 이전 초안 닫기, 대상 호실 강조, 초안 대상 층으로 이동
   if (ai.result !== seen) {
     setSeen(ai.result)
@@ -420,7 +421,11 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
               <div className="main-col">
                 <section className="card twin" aria-label={`${scope} ${sim ? '운전 시뮬레이션' : '3D 도면'}`}>
                   <div className="twin-head">
-                    <h2>{scope} {sim ? '운전 시뮬레이션' : '3D 도면'}</h2>
+                    {/* 층·호실 보기에서 건물 전체로 돌아가는 경로(트윈 자체 상단 경로 표시는 앱 안에서 숨김). 앱 층을 비우면 트윈이 건물 보기로 이동 */}
+                    <div className="twin-title">
+                      {twinOn && floor && <button className="twin-back" onClick={() => { setFloor(''); setSelected(null) }}><ArrowLeft size={18} aria-hidden />건물 전체</button>}
+                      <h2>{scope} {sim ? '운전 시뮬레이션' : '3D 도면'}</h2>
+                    </div>
                     {ops && <div className="modes" role="tablist" aria-label="표시 지표">
                       {MODES.map((m) => (
                         <button key={m.id} role="tab" aria-selected={mode === m.id} className={mode === m.id ? 'pill on' : 'pill'} onClick={() => setMode(m.id)}>{m.label}</button>
