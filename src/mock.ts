@@ -66,7 +66,7 @@ export async function mockAsk(text: string, building: string): Promise<QueryResu
     const list = top.map((r) => `${r.name}(${r[key]}${unit})`).join(', ')
     const idle = top.filter((r) => r.onOff && r.occupants === 0).length
     return {
-      answer: `${where} 중 ${label} ${asc ? '하위' : '상위'} ${top.length}곳은 ${list}입니다.${idle ? ` 이 중 ${idle}곳은 재실 없이 운전 중이므로 OFF 스케줄을 검토하십시오.` : ''}`,
+      answer: `${where} 중 ${label} ${asc ? '하위' : '상위'} ${top.length}곳은 ${list}입니다.${idle ? `\n이 중 ${idle}곳은 재실 없이 운전 중이므로 OFF 스케줄을 검토하십시오.` : ''}`,
       highlight: top.map((r) => r.id), draft: null, mock: true,
       charts: [{ kind: 'bar', title: `${where} ${label} ${asc ? '낮은' : '높은'} 순 ${top.length}곳`, unit, items: top.map((r) => ({ id: r.id, label: r.name, sub: `${r.floor}, ${r.use}`, value: r[key] as number })) }],
     }
@@ -85,7 +85,7 @@ export async function mockAsk(text: string, building: string): Promise<QueryResu
   }
   const act = action === 'off' ? '냉난방 OFF' : action === 'on' ? '냉난방 ON' : `설정온도 ${draft.setpoint}℃`
   return {
-    answer: `${where} ${rooms.length}곳에 ${time} 이후${condition === 'unused' ? ' 재실이 없을 때' : ''} ${act} 스케줄 초안을 만들었습니다. 확인 후 저장하십시오.`,
+    answer: `${where} ${rooms.length}곳에 ${time} 이후${condition === 'unused' ? ' 재실이 없을 때' : ''} ${act} 스케줄 초안을 만들었습니다.`,
     highlight: draft.roomIds, draft, mock: true,
   }
 }
