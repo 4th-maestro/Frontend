@@ -97,7 +97,8 @@ export default function App() {
   }, [authed])
   if (!authed) return <LoginScreen onDone={() => setAuthed(true)} />
   // 판매사 관리자는 기업 상태와 무관하게 건물 화면·기업 관리 사용
-  const vendor = me?.role === 'admin' || isAdmin()
+  // 판정: GET /me(서버, 판매사 관리자 지정·해제 즉시 반영) 우선, 응답 전에만 토큰 그룹
+  const vendor = me ? me.role === 'admin' : isAdmin()
   if (!vendor && (stopped || me?.company?.status === 'suspended')) {
     return <Suspended email={me?.email ?? currentEmail()} company={me?.company?.name} message={stopped || STOPPED} />
   }
@@ -321,7 +322,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   // - 스위치: 판매사 관리자·고객사 관리자만(운영자는 비활성, 서버도 403)
   // - 처리 결과는 다음 조회 전까지 화면에 먼저 반영. 수락·되돌리기는 스케줄이 바뀌므로 시간표·상태도 다시 조회
   const me = useContext(MeContext)
-  const canToggle = isAdmin() || me?.role === 'admin' || me?.role === 'manager'
+  const canToggle = me ? me.role === 'admin' || me.role === 'manager' : isAdmin()
   const opsPoll = usePoll(fetchOps, ops ? building : '')
   const [opsEdit, setOpsEdit] = useState<{ from: OpsOverview | null; value: OpsOverview } | null>(null)
   const opsData = opsEdit && opsEdit.from === opsPoll.data ? opsEdit.value : opsPoll.data
