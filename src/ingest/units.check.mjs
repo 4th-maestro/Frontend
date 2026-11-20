@@ -1,7 +1,8 @@
 // 실내기 매핑 계산 자가 점검: node src/ingest/units.check.mjs (Node 23.6 이상, TypeScript 형식 제거 실행)
-// 범위: 기준점 변환, 호실 배정, 인식 결과 변환, 인식용 보정 해상도와 픽셀 → m 환산
+// 범위: 기준점 변환, 호실 배정, 인식 결과 변환(실내기, 문), 인식용 보정 해상도와 픽셀 → m 환산
 import assert from 'node:assert/strict'
-import { applyDetections, assignRoom, detectionsToUnits, fromPlan, similarity, toPlan } from './units.ts'
+import { applyDetections, assignRoom, connectOdus, detectionsToDoors, detectionsToUnits, fromPlan, ODU_MARGIN, similarity, snapDoor, toPlan } from './units.ts'
+import { autoUnits } from './auto-units.ts'
 import { MARGIN, rectify } from '../../twin/pipeline/pipeline-core.js'
 import { detectRes } from '../../twin/pipeline/host-bridge.js'
 
@@ -64,4 +65,52 @@ near(toPlan([1 / res, 0, -MARGIN, 0, 1 / res, -MARGIN], [su / n, sv / n]), [400 
 // 7. 호실 없는 파서 실내기(floor만 있음): 그 층에서 호실 배정, 실 밖이면 review
 const loose = applyDetections({ ...plan, floors: plan.floors.map(f => ({ ...f, detections: [] })), idus: [{ id: 'p1', room: '', floor: '2F', pos: [7, 2] }, { id: 'p2', room: '', floor: '2F', pos: [12, 2] }] })
 assert.deepEqual(loose.idus.map(u => [u.room, Boolean(u.review)]), [['B', false], ['B', true]])
+
+// 8. 문 인식 결과(cls door): 가장 가까운 호실 변 위 구간(폭 = 상자 긴 변), 열림 쪽은 상자 중심 쪽, review(변 없음, 폭 0.6~2.0m 밖), 실내기로 바꾸지 않음
+{
+  const dets = [
+    { cls: 'door', conf: .8, box: [40, 60, 60, 80] },      // 실 A 아래 벽(y 4) 위쪽 1m 상자 → A의 변 [5,4]→[0,4]
+    { cls: 'door', conf: .7, box: [100, 40, 150, 90] },    // 2.5m 상자 → 폭 범위 밖
+    { cls: 'door', conf: .6, box: [400, 400, 410, 420] },  // 건물 밖 → 맞는 변 없음, 상자 긴 축(세로) 구간
+    { cls: 'cassette_4way', conf: .9, box: [40, 40, 60, 60] },
+  ]
+  const f = { id: '2F', rooms, detections: dets }
+  const doors = detectionsToDoors(f, scale)
+  assert.deepEqual(doors.map(d => [d.id, d.a, d.b, d.hinge, d.side, d.review, d.ref]), [
+    ['DOOR-2F-yolo-1', [3, 4], [2, 4], 'a', -1, false, 'det-1'],
+    ['DOOR-2F-yolo-2', [7.5, 4], [5, 4], 'a', -1, true, 'det-2'],
+    ['DOOR-2F-yolo-3', [20.25, 20], [20.25, 21], 'a', 1, true, 'det-3'],
+  ])
+  assert.ok(doors.every(d => d.source === 'yolo'))
+  assert.deepEqual(detectionsToUnits(f, scale).map(u => u.ref), ['det-4'])
+  const out = applyDetections({ ...plan, floors: [{ ...f, background: { px: [200, 120], toPlan: scale } }], idus: [] })
+  assert.deepEqual([out.floors[0].detections.length, out.floors[0].doors.length, out.idus.length], [0, 3, 1])
+  // 변 끝을 넘는 점은 변 안으로 밀고, dir과 반대 방향 변이면 a, b를 바꿈
+  assert.deepEqual(snapDoor(rooms, [.1, 4], .9, .3), { a: [.9, 4], b: [0, 4] })
+  assert.deepEqual(snapDoor(rooms, [.1, 4], .9, .3, [1, 0]), { a: [0, 4], b: [.9, 4] })
+  assert.equal(snapDoor(rooms, [2.5, 2], .9, .3), null)
+}
 console.log('units.check: 통과')
+
+// 실외기 연결과 빈 호실 추정: 20×10m 건물, 1F에 실 3개(서측 60㎡ 실내기 없음, 동측 30㎡ 실내기 없음, 동측 실 실내기 1대), 복도 1개
+{
+  const sq = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+  const plan = { schema: 'twin.building/v1', building: { name: 't', size: { w: 20, d: 10 } }, floors: [{ id: '1F', rooms: [
+    { id: 'A', name: 'A', type: 'room', polygon: sq(0, 0, 10, 6) }, { id: 'B', name: 'B', type: 'room', polygon: sq(10, 0, 15, 6) },
+    { id: 'C', name: 'C', type: 'room', polygon: sq(15, 0, 20, 6) }, { id: 'H', name: '복도', type: 'corridor', polygon: sq(0, 6, 20, 10) }] }],
+    idus: [{ id: 'u1', room: 'C', pos: [17, 3] }] }
+  const c = connectOdus(plan)
+  assert.equal(c.idus[0].odu, 'ODU-1F-E')
+  assert.deepEqual(c.odus.map(o => [o.id, o.serves, o.mark]), [['ODU-1F-E', '1F', [20 + ODU_MARGIN / 2, 5]]])
+  const { plan: a, added } = autoUnits(plan)
+  // A 60㎡ → 2대(4방향), B 30㎡ → 1대(1방향), C는 기존 1대 유지, 복도 제외
+  assert.equal(added, 3)
+  assert.deepEqual(a.idus.filter(u => u.source === 'estimate').map(u => [u.room, u.cls, u.review, u.odu]),
+    [['A', 'cassette_4way', true, 'ODU-1F-W'], ['A', 'cassette_4way', true, 'ODU-1F-W'], ['B', 'cassette_1way', true, 'ODU-1F-E']])
+  assert.deepEqual(a.odus.map(o => o.id).sort(), ['ODU-1F-E', 'ODU-1F-W'])
+  assert.ok(a.odus.every(o => o.mark[0] < 0 || o.mark[0] > 20), '실외기 기호는 평면 좌우 여백')
+  // 위치를 맞추지 않은 인식 결과가 있는 층은 추정하지 않음
+  assert.equal(autoUnits({ ...plan, floors: plan.floors.map(f => ({ ...f, detections: [{ cls: 'cassette_4way', conf: .9, box: [0, 0, 1, 1] }] })) }).added, 0)
+  console.log('실외기 연결, 빈 호실 추정 통과')
+}
+

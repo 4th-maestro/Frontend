@@ -5,13 +5,13 @@ import type { Plan } from '../floor-edit'
 import { onBuildingRendered, pipelineSrc } from '../twin'
 import { ACCEPT, API_ON, convertFiles, detect, kindOf, pageFiles, saveTwin, type Convert, type Job, type Page } from './api'
 import { detectingSrc, onDetectRequest, sendPlans } from './bridge'
-import { applyDetections, asPlan, pendingDetections, reviewUnits } from './units'
+import { applyDetections, asPlan, pendingDetections, reviewDoors, reviewUnits } from './units'
 import './ingest.css'
 
 // 도면 업로드 → 2D 실내기 매핑 → 확정 저장(판매사 건물 화면에서 사용). 규약: docs/human/reference/plan-ingest.md
 // - IFC, DXF, DWG: 서버 변환 초안(draftUrl)을 바로 편집, 렌더링한 도면(pages)은 층별 배경 이미지
 // - PDF: 서버가 렌더링한 페이지를, PNG, JPG: 고른 파일을 트윈 파이프라인(iframe)에 넣어 호실을 만들고, 파이프라인 결과를 편집
-// - 파이프라인은 보정 평면도마다 기호 인식을 요청(detectRequest) → 이 화면이 POST /plans/detect로 처리, 보정 이미지는 배경 이미지
+// - 파이프라인은 보정 평면도마다 기호 인식을 요청(detectRequest) → 이 화면이 보정 이미지를 1쪽 PDF로 바꿔 pdf 작업(렌더링 → 인식 모델)으로 처리
 // - 확정: onConfirm이 있으면 호출한 화면이 저장(판매사 건물 화면), 없으면 saveTwin(buildingId, twin, convert) 후 onDone(twin)
 const STEPS = [['parse', '파일 해석'], ['detect', '실내기 인식'], ['merge', '병합']] as const
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -33,9 +33,10 @@ export default function PlanIngest({ buildingId, onDone, onConfirm, convert }: {
   const blobs = useRef<string[]>([])
   const kind = kindOf(files)
 
-  function open(data: unknown, pages?: Page[]) {
+  async function open(data: unknown, pages?: Page[]) {
     try {
-      const plan = applyDetections(asPlan(data))
+      const { autoUnits } = await import('./auto-units')
+      const plan = autoUnits(applyDetections(asPlan(data))).plan
       if (pages) setBackgrounds(b => ({ ...b, ...Object.fromEntries(pages.map((p, i) => [p.floor ?? plan.floors[i]?.id, p.url]).filter(([f]) => f)) }))
       setDraft(plan)
       setError('')
@@ -84,8 +85,8 @@ export default function PlanIngest({ buildingId, onDone, onConfirm, convert }: {
 
   async function confirm(plan: Plan) {
     if (saving.current) return
-    const n = reviewUnits(plan).length, d = pendingDetections(plan)
-    if ((n || d) && !window.confirm(`확인 필요 실내기 ${n}대${d ? `, 위치를 맞추지 않은 인식 결과 ${d}개` : ''}가 남아 있습니다. 이대로 저장할까요?`)) return
+    const n = reviewUnits(plan).length, k = reviewDoors(plan).length, d = pendingDetections(plan)
+    if ((n || k || d) && !window.confirm(`확인 필요 실내기 ${n}대${k ? `, 확인 필요 문 ${k}개` : ''}${d ? `, 위치를 맞추지 않은 인식 결과 ${d}개` : ''}가 남아 있습니다. 이대로 저장할까요?`)) return
     if (onConfirm) { onConfirm(plan); return }
     saving.current = true
     setError('')
