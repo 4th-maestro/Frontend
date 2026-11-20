@@ -736,10 +736,10 @@ function editDown(e){
   if (editTool === 'room') { editSel = room?.id || null; renderSide(); draw(); return; }
   if (editTool === 'move' && hitIdu) { iduDrag = { id:hitIdu.id, room:hitIdu.room, pos:[...hitIdu.pos] }; cv.setPointerCapture(e.pointerId); return; }
   if (editTool === 'del' && hitIdu) { pinRoomIdus(hitIdu.room, unitsOf(hitIdu.room).filter(u => u.id !== hitIdu.id)); return; }
-  if (editTool === 'add' && room?.type === 'room') { pinRoomIdus(room.id, [...unitsOf(room.id), { x:m[0], y:m[1], kind:iduKind }]); return; }
+  if (editTool === 'add' && (room?.type === 'room' || room?.type === 'corridor')) { pinRoomIdus(room.id, [...unitsOf(room.id), { x:m[0], y:m[1], kind:iduKind }]); return; }
 }
 cv.addEventListener('pointerup', e => {
-  if (iduDrag) { const d = iduDrag; iduDrag = null; const J = OUT.json, f = J.floors[editF], target = f.rooms.find(x => x.type === 'room' && inRoomJ(d.pos[0], d.pos[1], x));
+  if (iduDrag) { const d = iduDrag; iduDrag = null; const J = OUT.json, f = J.floors[editF], target = f.rooms.find(x => x.type === 'room' && inRoomJ(d.pos[0], d.pos[1], x)) || f.rooms.find(x => x.type === 'corridor' && inRoomJ(d.pos[0], d.pos[1], x));
     if (!target) { draw(); return; }
     const zoneOf = id => f.rooms.find(x => x.id === id)?.zoneOf;
     if (target.id === d.room || (zoneOf(d.room) && zoneOf(d.room) === zoneOf(target.id))) pinRoomIdus(d.room, unitsOf(d.room).map(u => u.id === d.id ? { ...u, x:d.pos[0], y:d.pos[1] } : u));
