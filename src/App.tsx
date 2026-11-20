@@ -465,7 +465,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
                     <FlowModal flow={report.flow} persona={report.ui.persona} onPersona={(k) => postUi(frame.current, `persona:${k}`)} onClose={() => postUi(frame.current, 'flow:off')} />
                   )}
                   {twinWait ? <div className="embed"><SkPlan /></div> : twinOn ? (
-                    <iframe ref={frame} className="embed" src={src} title="3D 디지털트윈" onLoad={() => { postTheme(frame.current); postState(frame.current, building, floor, mode, rooms, highlight, twinData) }} />
+                    <iframe ref={frame} className="embed" allow="fullscreen" src={src} title="3D 디지털트윈" onLoad={() => { postTheme(frame.current); postState(frame.current, building, floor, mode, rooms, highlight, twinData) }} />
                   ) : sim ? (
                     <p className="embed sim-none">이 건물은 3D 트윈 도면이 없어 운전 시뮬레이션을 사용할 수 없습니다.</p>
                   ) : floor ? (

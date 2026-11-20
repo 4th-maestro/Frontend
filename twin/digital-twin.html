@@ -123,6 +123,14 @@
   #live small{font-size:14px}
   #live.stale .dot{background:var(--muted)}
   #live.stale b{color:var(--muted)}
+  /* 화면 도구: 돋보기(확대·축소) · 전체화면 */
+  #viewTools button{padding:0;width:44px}
+  #viewTools svg{width:18px;height:18px}
+  #plan{transform-origin:50% 50%;transition:transform .22s ease-out}
+  #planWrap.zoomed{cursor:grab}
+  #planWrap.panning{cursor:grabbing}
+  #planWrap.panning #plan{transition:none}
+  @media (prefers-reduced-motion: reduce){ #plan{transition:none} }
 
   /* 핵심 수치 카드(건물): 앱 .kpi 구성(라벨, 값, 단위), 3D 위 겹침이라 값은 21px */
   #kpis{position:absolute;left:16px;top:76px;display:flex;flex-direction:column;gap:8px;z-index:4}
@@ -506,6 +514,11 @@
       </div>
       <button id="dataBtn" class="tgl" aria-pressed="false" title="이 화면을 그리는 데이터">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>데이터</button>
+      <div id="viewTools" class="seg glass" role="group" aria-label="화면 도구">
+        <button id="zoomIn" type="button" title="확대 (돋보기)" aria-label="확대"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M10.5 7.5v6M7.5 10.5h6"/></svg></button>
+        <button id="zoomOut" type="button" title="축소" aria-label="축소"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M7.5 10.5h6"/></svg></button>
+        <button id="fsBtn" type="button" title="전체화면" aria-label="전체화면" aria-pressed="false"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
       <div id="live" class="glass"><span class="dot"></span><b id="clock" class="num">--:--</b><small id="speedLbl"></small><small id="wx"></small></div>
     </header>
     <div id="floorTags"></div>
@@ -2142,7 +2155,7 @@ function goFloor(f){
   hideTip(); controls.autoRotate = false;
   if (state.floor !== f || state.view !== 'floor') tellHost('floorSelected', { floor:f.id });
   const enter = (seamless) => {
-    disposeRoom(); setInspector(false); setBodyView('floor'); state.floor = f; state.room = null; controls.enabled = false;
+    disposeRoom(); setInspector(false); setBodyView('floor'); state.floor = f; state.room = null; controls.enabled = false; resetPlanZoom();
     if (!seamless) { buildPlanSvg(f); updatePlanSvg(); }
     renderFloorStats(); renderCrumbs(); renderLegend();
     if (!seamless) renderBackdrop(f);
@@ -2859,6 +2872,38 @@ function renderLegend(){
 }
 $('#metrics').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMetric(b.dataset.m); });
 $('#pipesBtn').addEventListener('click', () => setPipes(!state.pipes));
+/* 화면 도구 ─ 돋보기: 3D는 카메라를 대상 쪽으로 한 단계(×0.8) 당기고, 층 평면도는 평면도를 1.25배씩 확대(최대 4배, 확대 중엔 끌어서 이동)
+               전체화면: 트윈 화면 전체 (대시보드 안에서는 iframe의 allow="fullscreen" 필요) */
+var PZ = { k:1, x:0, y:0 };   // var: 처음 화면이 층(?floor=)이면 이 줄보다 먼저 goFloor가 불릴 수 있음
+function clampPan(){   // 평면도 그림(여백 제외)이 틀 밖으로 완전히 나가지 않게: 확대한 그림 크기 − 틀 크기의 절반까지만 이동
+  const w = $('#planWrap').clientWidth, h = $('#planWrap').clientHeight, p = state.floor?.plan;
+  const sc = p ? Math.min(w / p.w, h / p.h) : 1, cw = p ? p.w * sc : w, ch = p ? p.h * sc : h;
+  const mx = Math.max(0, (PZ.k * cw - w) / 2), my = Math.max(0, (PZ.k * ch - h) / 2);
+  PZ.x = clamp(PZ.x, -mx, mx); PZ.y = clamp(PZ.y, -my, my); }
+function applyPlanZoom(){ svg.style.transform = PZ.k === 1 ? '' : `translate(${PZ.x}px,${PZ.y}px) scale(${PZ.k})`; $('#planWrap').classList.toggle('zoomed', PZ.k > 1); }
+function resetPlanZoom(){ PZ.k = 1; PZ.x = PZ.y = 0; applyPlanZoom(); }
+function zoomView(f){                                   // f < 1 확대, f > 1 축소
+  if (state.view === 'floor') { PZ.k = clamp(Math.round(PZ.k / f * 100) / 100, 1, 4); PZ.x /= f; PZ.y /= f; clampPan(); applyPlanZoom(); return; }
+  const tgt = controls.target.clone(), dir = camera.position.clone().sub(tgt), d = dir.length();
+  const nd = clamp(d * f, controls.minDistance, controls.maxDistance); if (Math.abs(nd - d) < 1e-3) return;
+  flyTo(tgt.clone().add(dir.setLength(nd)), tgt, 320);
+}
+$('#zoomIn').addEventListener('click', () => zoomView(.8));
+$('#zoomOut').addEventListener('click', () => zoomView(1.25));
+{ // 확대한 평면도 끌어서 옮기기 (조금이라도 끌었으면 그 클릭은 방 선택으로 보지 않음)
+  const wrap = $('#planWrap'); let drag = null, moved = false;
+  wrap.addEventListener('pointerdown', e => { if (PZ.k <= 1 || e.button !== 0) return; drag = { x:e.clientX, y:e.clientY, px:PZ.x, py:PZ.y }; moved = false; });
+  addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!moved && Math.hypot(dx, dy) < 4) return; moved = true; wrap.classList.add('panning'); PZ.x = drag.px + dx; PZ.y = drag.py + dy; clampPan(); applyPlanZoom(); });
+  addEventListener('pointerup', () => { drag = null; wrap.classList.remove('panning'); });
+  wrap.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+}
+{ const b = $('#fsBtn'), ICON = { on:'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5', off:'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5' };
+  if (!document.fullscreenEnabled) b.hidden = true;
+  b.addEventListener('click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(e => console.warn('[twin] 전체화면을 열지 못했어요', e)));
+  document.addEventListener('fullscreenchange', () => { const on = !!document.fullscreenElement;
+    b.setAttribute('aria-pressed', on); b.title = b.ariaLabel = on ? '전체화면 끝내기 (Esc)' : '전체화면'; b.querySelector('path').setAttribute('d', on ? ICON.on : ICON.off); });
+}
 function setMetric(m){ if (!SCALES[m]) return; state.metric = m; renderLegend(); recolorBuilding(); renderTags(); if (state.view === 'floor') updatePlanSvg(); }
 function renderCrumbs(){
   const c = [`<a data-go="building">${esc(CFG.buildingName)}</a>`];
