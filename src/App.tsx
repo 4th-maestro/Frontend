@@ -118,7 +118,8 @@ type DashboardProps = { building: string; info?: BuildingCard; tab: Tab; buildin
 
 function Dashboard({ building, info, tab, buildings, themeButton, dark }: DashboardProps) {
   const ops = tab === 'ops'
-  const [floor, setFloor] = useState('')
+  // 내장 3D 도면은 층 단위로만 그리므로 트윈 화면(TWIN_URL)이 없으면 첫 층으로 시작, 트윈은 건물 전체('')로 시작
+  const [floor, setFloor] = useState(TWIN_URL ? '' : (info?.floors[0] ?? '1F'))
   const [mode, setMode] = useState<Mode>('temp')
   const [status, setStatus] = useState<Status | null>(null)
   const [error, setError] = useState('')
@@ -170,6 +171,8 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   useEffect(() => onTwinChange({ mode: setMode, building: setTwin, floor: (f) => { if (!f || floors.includes(f)) { setFloor(f); setSelected(null) } } }), [floors])
   // 선택된 층이 현재 건물의 층 목록에서 사라지면 건물 보기로 돌아감
   if (status && floor && !floors.includes(floor)) setFloor('')
+  // 트윈 화면이 없으면 빈 층(새로고침 직후 빈 도면) 대신 첫 층 표시
+  if (!TWIN_URL && !floor && floors.length) setFloor(floors[0])
   // 새 AI 결과: 대화에 추가, 이전 초안 닫기, 대상 호실 강조, 초안 대상 층으로 이동
   if (ai.result !== seen) {
     setSeen(ai.result)
