@@ -501,6 +501,7 @@
         <button data-m="temp" role="tab">온도</button>
         <button data-m="hum" role="tab">습도</button>
         <button data-m="power" role="tab">전력</button>
+        <button data-m="comfort" role="tab">쾌적도</button>
         <button data-m="alert" role="tab">상태</button>
       </div>
       <button id="dataBtn" class="tgl" aria-pressed="false" title="이 화면을 그리는 데이터">
@@ -680,10 +681,15 @@ const SCALES = {
   hum:   { label:'습도', unit:'%', min:30, max:70, colors:['#E6F7F5', '#B4E8E2', '#6ECFC4', '#2BA89B', '#0F766E'] },
   power: { label:'전력', unit:'kW', min:0, max:6, colors:['#E8F0FE', '#BFD4FB', '#7FA8F2', '#3F7AE0', '#1E4FB0'] },
   alert: { label:'상태', unit:'', min:0, max:2, colors:['#C1C1C1', '#B45309', '#B91C1C'] },
+  // 쾌적도 = ISO 7730 PMV (−3 춥다 … 0 중립 … +3 덥다), 실내기 없는 방은 회색 (FR-21)
+  //   색은 대시보드 범례(src/heat.ts COMFORT)와 같은 발산 색: 추움 파랑 · 쾌적 흰색 · 더움 주황
+  comfort:{ label:'쾌적도', unit:'PMV', min:-2, max:2, colors:['#1E4FB0', '#9CC0F5', '#F4F4F4', '#F9A65A', '#B45309'] },
 };
+const NO_VALUE = '#C1C1C1';
 const frac = (m, v) => { const sc = SCALES[m]; return Number.isFinite(v) ? clamp((v - sc.min) / (sc.max - sc.min), 0, 1) : 0; };
 const _a = new THREE.Color(), _b = new THREE.Color();
 function colorInto(metric, v, out, smooth = false){
+  if (v == null || Number.isNaN(v)) return out.set(NO_VALUE);
   const cs = SCALES[metric].colors, k = frac(metric, v) * (cs.length - 1);
   if (!smooth) return out.set(cs[Math.round(k)]);
   const i = Math.min(Math.floor(k), cs.length - 2);
@@ -1034,6 +1040,7 @@ function emit(type, payload = {}){ if (window.parent !== window) window.parent.p
 function metricValue(r, m){
   if (state.persona === 'sim' && SIM.result) { const x = simRoom(r.id);           // 시뮬레이션 모드: 예상 실온(재실 중 최고)으로 색칠
     if (m === 'temp' && x?.maxTempC != null) return x.maxTempC; if (m === 'power' && x) return x.elecKwh / 19; }
+  if (m === 'comfort') return r.cmf ? r.cmf.pmv : null;
   return m === 'temp' ? r.temp : m === 'hum' ? r.hum : m === 'power' ? r.power : r.alert.level; }
 let HL = { ids:new Set(), until:0 };
 function highlight(ids, secs = 8){ HL = { ids:new Set(ids), until: performance.now() + secs * 1000 }; if (state.view === 'floor') updatePlanSvg(); }
@@ -1457,6 +1464,11 @@ function renderTags(){
   }
   for (const f of FLOORS) {
     const a = floorAgg(f.rooms), crit = f.rooms.some(r => r.alert.level === 2), warn = f.rooms.some(r => r.alert.level === 1);
+    if (m === 'comfort') {   // 쾌적도: 사용 중인 방의 쾌적(|PMV| < 0.5) 비율, 색 = 평균 PMV
+      const us = f.rooms.filter(r => r.inUse && r.cmf), ok = us.filter(r => Math.abs(r.cmf.pmv) < .5).length, avg = us.length ? us.reduce((t, r) => t + r.cmf.pmv, 0) / us.length : null;
+      setHTML(tagEls[f.id].querySelector('.v'), `<span class="sw" style="background:${cssColor('comfort', avg)}"></span>${us.length ? `쾌적 ${ok}/${us.length}실<i>·</i>PMV ${pmvTxt(avg)}` : '사용 중인 방 없음'}<i>·</i>${a.occ}명`);
+      continue;
+    }
     const val = m === 'temp' ? `${a.temp.toFixed(1)}°C` : m === 'hum' ? `${Math.round(a.hum)}%` : m === 'power' ? `${a.power.toFixed(1)}kW${tot > 0 ? `<i>·</i>${Math.round(a.power / tot * 100)}%` : ''}` : `${a.alerts}실 주의`;
     const sw = m === 'alert' ? cssColor('alert', crit ? 2 : warn ? 1 : 0) : cssColor(m, m === 'temp' ? a.temp : m === 'hum' ? a.hum : a.power / Math.max(f.rooms.filter(r => r.type === 'room').length, 1));
     setHTML(tagEls[f.id].querySelector('.v'), `<span class="sw" style="background:${sw}"></span>${val}<i>·</i>${a.occ}명${crit || warn ? `<span class="al" style="display:inline-flex;color:${crit ? 'var(--danger)' : 'var(--caution)'}">${crit ? IC.alert : IC.alertCircle}</span>` : ''}`);
@@ -1491,7 +1503,8 @@ function recolorBuilding(){
     }
     for (const { a, m } of grp.userData.idus) m.material.emissive.setHex(STATUS_HEX[a.status]);
     { const rs = grp.userData.floor.rooms.filter(r => r.acs.length), m = state.metric;
-      const v = m === 'alert' ? Math.max(0, ...rs.map(r => r.alert.level)) : rs.reduce((s2, r) => s2 + metricValue(r, m), 0) / Math.max(rs.length, 1);
+      const vs = rs.map(r => metricValue(r, m)).filter(x => x != null);
+      const v = m === 'alert' ? Math.max(0, ...rs.map(r => r.alert.level)) : vs.length ? vs.reduce((s2, x) => s2 + x, 0) / vs.length : null;
       colorInto(m, v, grp.userData.neonC); grp.userData.crit = rs.some(r => r.alert.level === 2); }
   }
   for (const x of oduObjs) {
@@ -2270,6 +2283,7 @@ function updatePlanSvg(){
     const narrow = r.b.w < 9.5;
     const parts = [['temp', `${r.temp.toFixed(1)}°`], ['hum', `${Math.round(r.hum)}%`], ['power', `${r.power.toFixed(1)}kW`]];
     if (r.cls || r.occSrc === 'wifi' || r.occSrc === 'sensor') parts.push(['occ', `${r.occ}명`]);
+    if (m === 'comfort' && r.cmf) parts.unshift(['comfort', `PMV ${pmvTxt(r.cmf.pmv)}`]);
     const show = narrow ? parts.filter(([k]) => k === (m === 'alert' ? 'temp' : m)) : parts;
     if (chip) {
     const text = chip.querySelector('text');
@@ -2986,8 +3000,8 @@ window.DigitalTwin = API;
    대시보드 → 트윈: {source:'maestro', type:'state', building, floor, mode, highlight, rooms} (버튼을 누를 때마다 옴)
      mode(온도·전력·습도·이상 감지) → 트윈 색 기준, floor(층 목록) → 트윈 층, highlight(AI 응답 대상 호실) → 깜빡임
    트윈 → 대시보드: {source:'twin', type:'roomSelected'|'floorSelected'|'modeSelected'} — 트윈에서 고르면 대시보드 버튼도 따라감 */
-const HOST_MODE = { temp:'temp', humidity:'hum', powerKw:'power', anomaly:'alert' }, MODE_HOST = { temp:'temp', hum:'humidity', power:'powerKw', alert:'anomaly' };
-const METRIC_KO = { temp:'온도', hum:'습도', power:'전력', alert:'이상 감지' };
+const HOST_MODE = { temp:'temp', humidity:'hum', powerKw:'power', anomaly:'alert', comfort:'comfort' }, MODE_HOST = { temp:'temp', hum:'humidity', power:'powerKw', alert:'anomaly', comfort:'comfort' };
+const METRIC_KO = { temp:'온도', hum:'습도', power:'전력', alert:'이상 감지', comfort:'쾌적도' };
 const HOST = { on:false, last:null, applying:false, timer:0, since:0 };
 // 앱 데이터를 받은 뒤에만 보고: 그 전 값은 트윈 자체 계산이라 앱 화면 값이 바뀌어 보임. 5초 안에 못 받으면 그대로 보고
 const hostReady = () => HOST.dataAt != null || performance.now() - HOST.since > 5000;

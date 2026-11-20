@@ -78,7 +78,7 @@ export function onTwinChange(handlers: { floor?: (floor: string) => void; mode?:
     if (e.data.type === 'floorSelected' && handlers.floor) handlers.floor(String(e.data.floor))
     if (e.data.type === 'building' && handlers.building && Array.isArray(e.data.floors) && e.data.floors.length)
       handlers.building({ id: String(e.data.id), name: String(e.data.name), floors: e.data.floors as TwinFloor[] })
-    if (e.data.type === 'modeSelected' && handlers.mode && ['temp', 'powerKw', 'humidity', 'anomaly'].includes(e.data.mode)) handlers.mode(e.data.mode as Mode)
+    if (e.data.type === 'modeSelected' && handlers.mode && ['temp', 'powerKw', 'humidity', 'comfort', 'anomaly'].includes(e.data.mode)) handlers.mode(e.data.mode as Mode)
   }
   window.addEventListener('message', listener)
   return () => window.removeEventListener('message', listener)

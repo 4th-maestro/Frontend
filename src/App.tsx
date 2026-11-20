@@ -12,7 +12,8 @@ import { ME_CHANGED, MeContext } from './auth/me'
 import SettingsPage from './settings/SettingsPage'
 import BuildingCompare from './energy/BuildingCompare'
 import EnergyPage from './energy/EnergyPage'
-import { SCALES } from './heat'
+import { COMFORT, SCALES } from './heat'
+import { comfortOf, comfortText } from './comfort'
 import { setRoomSetpoint, summarize } from './mock'
 import AnomalyPanel from './panels/AnomalyPanel'
 import PowerTrend from './panels/PowerTrend'
@@ -40,6 +41,7 @@ const MODES: { id: Mode; label: string }[] = [
   { id: 'temp', label: '온도' },
   { id: 'powerKw', label: '전력' },
   { id: 'humidity', label: '습도' },
+  { id: 'comfort', label: '쾌적도' },
   { id: 'anomaly', label: '이상 감지' },
 ]
 // 예시 질의 층: 건물의 맨 위층(교육관은 1F만 있음)
@@ -530,6 +532,11 @@ function Legend({ mode, status }: { mode: Mode; status: Status | null }) {
     <div className="legend">
       {mode === 'anomaly' ? (
         <span><i className="sw bad" />설정온도 미도달 HVAC, 회색은 정지</span>
+      ) : mode === 'comfort' ? (
+        <span>
+          {COMFORT.colors.map((c) => <i key={c} className="sw" style={{ background: c }} />)}
+          쾌적도 PMV 추움 −1.5 · 쾌적 ±0.5 · 더움 +1.5 (ISO 7730)
+        </span>
       ) : (
         <span>
           {SCALES[mode].colors.map((c) => <i key={c} className="sw" style={{ background: c }} />)}
@@ -554,6 +561,7 @@ function RoomDetail({ r }: { r: Room }) {
         <dt>설정온도</dt><dd>{r.setpoint}℃</dd>
         <dt>실내온도</dt><dd>{r.temp}℃</dd>
         <dt>습도</dt><dd>{r.humidity}%</dd>
+        <dt>쾌적도</dt><dd>{comfortText(comfortOf(r))}</dd>
         <dt>전력</dt><dd>{r.powerKw}kW</dd>
         <dt>재실</dt><dd>{r.occupants}명</dd>
       </dl>
