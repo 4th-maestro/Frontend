@@ -1,0 +1,4 @@
+# EnergyPlus 실행 결과 (계산 서버가 다시 만듦)
+sim/
+# 명령줄 실측 시뮬레이션 결과
+data/**/live-scenario.json

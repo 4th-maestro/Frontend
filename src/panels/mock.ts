@@ -97,7 +97,7 @@ async function schedules(building: string) {
   const ids = (floor: string, use: string) => rooms.filter((r) => r.floor === floor && r.use === use).map((r) => r.id)
   const store = [
     { id: `mock-${building}-seed-1`, buildingId: building, roomIds: ids('2F', '회의실'), action: 'off' as const, time: '13:00', condition: 'unused' as const, createdAt: at, sourceText: '2층 13시 이후 미사용 회의실 냉방 OFF' },
-    { id: `mock-${building}-seed-2`, buildingId: building, roomIds: ids('1F', '진료실'), action: 'setpoint' as const, time: '18:00', condition: 'always' as const, setpoint: 20, createdAt: at, sourceText: '1층 진료실 18시 설정온도 20도' },
+    { id: `mock-${building}-seed-2`, buildingId: building, roomIds: ids('3F', '강의실'), action: 'setpoint' as const, time: '18:00', condition: 'always' as const, setpoint: 20, createdAt: at, sourceText: '3층 강의실 18시 설정온도 20도' },
   ].filter((s) => s.roomIds.length)
   stores.set(building, store)
   return store
