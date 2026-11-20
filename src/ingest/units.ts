@@ -81,7 +81,7 @@ export function snapDoor(rooms: PlanRoom[], p: Point, w: number, max: number, di
 }
 
 // 인식 결과 중 문(cls door) → 문. 상자 중심에서 가장 가까운 호실 변(거리 ≤ 상자 긴 변)에 폭 = 긴 변 구간을 두고, 열림 쪽은 상자 중심 쪽
-// 맞는 변이 없으면 상자 긴 축 위 구간. 맞는 변이 없거나 폭이 0.6~2.0m 밖이면 review. 경첩은 상자로 알 수 없어 a
+// 맞는 변이 없으면 상자 긴 축 위 구간. 맞는 변이 없거나 폭이 0.6~2.0m 밖이거나 신뢰도 0.5 미만이면 review(Lambda common.door_from_box와 같음). 경첩은 상자로 알 수 없어 a
 export function detectionsToDoors(floor: PlanFloor, m: Affine, detections: Detection[] = floor.detections ?? []): Door[] {
   const scale = Math.hypot(m[0], m[3])
   return detections.flatMap((d, i): Door[] => {
@@ -92,7 +92,7 @@ export function detectionsToDoors(floor: PlanFloor, m: Affine, detections: Detec
     const { a, b } = seg ?? { a: toPlan(m, wide ? [u0, vc] : [uc, v0]).map(r2) as Point, b: toPlan(m, wide ? [u1, vc] : [uc, v1]).map(r2) as Point }
     const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
     return [{ id: `DOOR-${floor.id}-yolo-${i + 1}`, a, b, hinge: 'a', side: cross > 1e-9 ? -1 : 1, source: 'yolo', conf: r2(d.conf),
-      review: !seg || w < .6 || w > 2, ref: `det-${i + 1}` }]
+      review: !seg || w < .6 || w > 2 || d.conf < .5, ref: `det-${i + 1}` }]
   })
 }
 
