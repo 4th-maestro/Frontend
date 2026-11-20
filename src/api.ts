@@ -2,12 +2,12 @@ import { applyOverrides, demoStatus, kstNow, live, mockAsk, summarize } from './
 import { mockAnomalies, mockBuildings, mockCancelSchedule, mockHistory, mockRecommendations, mockSaveSchedule, mockSchedules } from './panels/mock'
 import type { Anomalies, History, Recommendations, Schedules } from './panels/types'
 import { mockOps, mockOpsAct, mockOpsSettings } from './ops/mock'
-import type { Decision, OpsAction, OpsOverview, OpsSettings } from './ops/types'
+import type { Decision, OpsAction, OpsDraft, OpsOverview, OpsSettings } from './ops/types'
 import { AUTH_ON, getAccessToken, signOut } from './auth/cognito'
 import type { Step } from './ai/types'
 import type { Chart, Draft, Portfolio, QueryResult, Source, Status } from './types'
 
-export type ChatRecord = { sk: string; role: 'user' | 'assistant'; text: string; steps?: Step[]; highlight?: string[]; draft?: Draft | null; charts?: Chart[]; sources?: Source[] }
+export type ChatRecord = { opsDraft?: OpsDraft | null; sk: string; role: 'user' | 'assistant'; text: string; steps?: Step[]; highlight?: string[]; draft?: Draft | null; charts?: Chart[]; sources?: Source[] }
 
 const BASE = import.meta.env.VITE_API_BASE_URL as string | undefined
 // API 주소 설정 여부: 없으면 화면 전체가 목업 모드
