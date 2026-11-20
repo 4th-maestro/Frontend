@@ -374,10 +374,18 @@
   body.hosted #persona button[data-p="sim"]{display:none}
   /* 앱 임베드(2026-11-20): 트윈은 3D 렌더링과 호실 선택만 담당. 버튼, 칩, 패널은 앱 카드가 대신하고 ui 메시지로 제어.
      범례는 앱 카드에 있으므로 숨김(시뮬레이션 역할도 같은 온도 척도) */
-  body.hosted #bar, body.hosted #hostLink, body.hosted #kpis, body.hosted #actions, body.hosted #floorPicker, body.hosted #floorTags,
+  body.hosted #bar, body.hosted #hostLink, body.hosted #kpis, body.hosted #floorPicker, body.hosted #floorTags,
   body.hosted #floorTabs, body.hosted #roomBack, body.hosted #infoBtn, body.hosted #roomTools, body.hosted #roomTitle,
-  body.hosted #inspector, body.hosted #legend, body.hosted #flow{display:none !important}  /* 데이터 흐름은 앱 모달(보고의 flow)로 표시 */
+  body.hosted #inspector, body.hosted #legend, body.hosted #flow, body.hosted #actions .list, body.hosted #actions .ft{display:none !important}  /* 데이터 흐름은 앱 모달(보고의 flow)로 표시 */
   body.hosted #floorView{padding:8px !important}
+  /* 앱 임베드 역할 요약(2026-11-20): 건물 보기 오른쪽 위 플로팅 카드(요약만). 층·호실 보기와 좁은 화면(480px 이하)은 숨김(앱 상단 지표에 같은 값) */
+  body.hosted #actions{display:flex !important;top:12px;right:12px;bottom:auto;width:min(300px,calc(100% - 24px));max-height:none;overflow:visible}
+  body.hosted.v-floor #actions, body.hosted.v-room #actions, body.hosted.diving #actions{display:none !important}
+  body.hosted #actions .hd{cursor:default;padding-right:16px}
+  body.hosted #actions .hd::after{display:none}
+  body.hosted #actions .hero{margin:12px}
+  @media (max-width:480px){ body.hosted #actions{display:none !important} }
+  #tip .act-d{margin:2px 0 4px 22px;color:var(--body);font-size:14px}
   /* 앱 안 층 평면도(2026-11-20): 층 지표 카드를 평면도 위에 띄우고 평면도는 카드 전체 높이 사용
      - 지표 5칸은 아래 한 줄, 안내 문구(사진 추정 공간 등)는 왼쪽 위. 평면도는 그 높이만큼만 비켜 겹치지 않음 */
   body.hosted #planWrap{margin:0;padding:8px 8px 72px}
@@ -1640,13 +1648,14 @@ function placeTags(it){
 }
 
 function recolorBuilding(){
+  const act = actionsByRoom();
   for (const grp of floorGroups) {
     for (const bk of grp.userData.blocks) {
       bk.tc = bk.tc || new THREE.Color().copy(bk.mesh.material.color);
       colorInto(state.metric, metricValue(bk.r, state.metric), bk.tc);
-      const lv = bk.r.alert.level;
+      const lv = markLv(bk.r, act);
       bk.beacon.visible = lv > 0; bk.beacon.material.map = lv === 2 ? critTex : warnTex;
-      bk.beam.visible = lv === 2;
+      bk.beam.visible = bk.r.alert.level === 2;
     }
     for (const { a, m } of grp.userData.idus) m.material.emissive.setHex(STATUS_HEX[a.status]);
     { const rs = grp.userData.floor.rooms.filter(r => r.acs.length), m = state.metric;
@@ -2470,7 +2479,17 @@ function buildPlanSvg(f, intro = false){
   planRefs = RS.map(r => ({ r, tint:svg.querySelector(`.tint[data-id="${r.id}"]`), chip:svg.querySelector(`.chip[data-id="${r.id}"]`), badge:svg.querySelector(`.badge[data-id="${r.id}"]`),
     idus:r.acs.map(a => [a, svg.querySelector(`.idu[data-a="${a.id}"]`)]) }));
 }
+// 앱 임베드(2026-11-20): 역할별 조치 항목을 목록 패널 대신 호실 표시(3D 신호, 평면 배지)와 말풍선으로 표시
+// - 표시 단계: 이상 단계(r.alert.level)와 조치 단계 중 큰 값, 조치는 최소 주의(1)
+function actionsByRoom(){
+  const m = new Map();
+  if (!HOST.on || state.persona === 'sim') return m;
+  for (const i of insights(state.persona, ROOMS)) m.set(i.r.id, [...(m.get(i.r.id) || []), i]);
+  return m;
+}
+const markLv = (r, act) => Math.max(r.alert.level, act.has(r.id) ? Math.max(1, ...act.get(r.id).map(i => i.lv)) : 0);
 function updatePlanSvg(){
+  const act = actionsByRoom();
   const m = state.metric, hlOn = performance.now() < HL.until;
   for (const { r, tint, chip, badge, idus } of planRefs) {
     const col = cssColor(m, metricValue(r, m)); tint.style.fill = col; tint.style.setProperty('--c', col);
@@ -2486,7 +2505,7 @@ function updatePlanSvg(){
     const bb = text.getBBox(), rect = chip.querySelector('rect');
     rect.setAttribute('x', bb.x - 9); rect.setAttribute('y', bb.y - 5); rect.setAttribute('width', bb.width + 18); rect.setAttribute('height', bb.height + 10);
     }
-    const lv = r.alert.level;
+    const lv = markLv(r, act);
     badge.style.display = lv ? '' : 'none';
     badge.querySelector('circle').style.fill = lv === 2 ? 'var(--danger)' : 'var(--caution)';
     for (const [a, el] of idus) el.style.fill = STATUS_CSS[a.status];
@@ -2618,8 +2637,8 @@ $('#actions').addEventListener('pointerdown', e => {
   if (state.view === 'floor' && state.floor.id === r.floorId) goRoom(r);
   else { highlight([r.id], 6); goFloor(FLOOR[r.floorId]); }
 });
-if (window.parent !== window && innerWidth < 1100) document.body.classList.add('act-min');
-$('#actions').addEventListener('click', e => { if (e.target.closest('.hd') && !e.target.closest('button, a, input, select')) document.body.classList.toggle('act-min'); });
+if (window.parent !== window && innerWidth < 1100 && params.get('host') !== '1') document.body.classList.add('act-min');
+$('#actions').addEventListener('click', e => { if (!document.body.classList.contains('hosted') && e.target.closest('.hd') && !e.target.closest('button, a, input, select')) document.body.classList.toggle('act-min'); });
 $('#actions').addEventListener('pointerover', e => { const it = e.target.closest('[data-room]'); if (it && state.view === 'floor') highlight([it.dataset.room], 2.5); });
 function setPersona(pk, quiet){
   if (!PERSONA[pk]) return; state.persona = pk;
@@ -3114,7 +3133,8 @@ function showRoomTip(r, e){
     ${r.scheduled ? `<div class="row"><span>학사 시간표</span><span>${r.cls ? `${esc(r.cls.course)} · ${r.occ}명` : r.next ? `다음 ${r.next.start} ${esc(r.next.course)}` : '오늘 수업 끝'}</span></div>` : ''}
     ${r.cmf ? `<div class="row"><span>쾌적도 PMV</span><span>${pmvTxt(r.cmf.pmv)} · 불만족 ${Math.round(r.cmf.ppd)}%</span></div>` : ''}
     ${r.acs.length ? `<div class="row"><span>실내기</span><span>${on}/${r.acs.length} 가동${fault ? ` · 고장 ${fault}` : ''} · ${r.setpoint}°</span></div>` : ''}
-    ${r.alert.items.map(([lv, m]) => `<div class="al" style="color:${lv === 2 ? 'var(--danger)' : 'var(--caution)'}">${lv === 2 ? IC.alert : IC.alertCircle}${esc(m)}</div>`).join('')}`;
+    ${r.alert.items.map(([lv, m]) => `<div class="al" style="color:${lv === 2 ? 'var(--danger)' : 'var(--caution)'}">${lv === 2 ? IC.alert : IC.alertCircle}${esc(m)}</div>`).join('')}
+    ${(actionsByRoom().get(r.id) || []).filter(i => !r.alert.items.some(([, m]) => m === i.title)).map(i => `<div class="al" style="color:${i.lv === 2 ? 'var(--danger)' : 'var(--caution)'}">${i.lv === 2 ? IC.alert : IC.alertCircle}${esc(i.title)}</div><div class="act-d">${i.d}</div>`).join('')}`;
   tip.style.display = 'block'; placeTip(e);
 }
 function showFloorTip(f, e){
