@@ -64,9 +64,15 @@ export function detectionsToUnits(floor: PlanFloor, m: Affine, detections: Detec
 
 // 초안 정리: 위치를 맞춘 층(background.toPlan 있음)의 인식 결과를 실내기로 바꾸고 detections를 비움
 // - 인식 결과가 1개 이상인 층은 파이프라인의 면적 추정 실내기(source estimate)를 뺌
+// - 호실이 없는 실내기(파서 결과의 floor만 있음)는 그 층에서 호실을 배정하고, 실 밖이면 review
 // - cls만 있는 실내기는 유형 이름, LG 예시 모델, 매뉴얼을 채움(원본 모델명은 유지)
 export function applyDetections(plan: Plan): Plan {
-  let idus = plan.idus
+  const rooms = new Set(plan.floors.flatMap(f => f.rooms.map(r => r.id)))
+  let idus = plan.idus.map(u => {
+    const floor = !rooms.has(u.room) && plan.floors.find(f => f.id === u.floor)
+    const hit = floor && assignRoom(u.pos, floor.rooms)
+    return hit ? { ...u, room: hit.room.id, review: u.review || !hit.inside } : u
+  })
   const floors = plan.floors.map(f => {
     const m = f.background?.toPlan
     if (!m || !f.detections?.length) return f

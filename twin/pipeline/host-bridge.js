@@ -4,6 +4,15 @@ const parentOrigin = () => document.referrer ? new URL(document.referrer).origin
 const fromHost = (e, type) => e.source === window.parent && e.data?.source === 'maestro' && e.data.type === type;
 let seq = 0;
 
+// 기호 인식용 보정 해상도(px/m): 인식 모델 학습 해상도 80px/m, 원본 사진의 실제 해상도(외곽 4변 중 최대)보다 크게 하지 않음,
+// 여백 포함 긴 변 8000px 이하. 0.1 단위 내림
+export const DETECT_PX_PER_M = 80, DETECT_MAX_PX = 8000;
+export function detectRes(corners, W, D, margin){
+  const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]), [nw, ne, se, sw] = corners;
+  const source = Math.max(len(nw, ne) / W, len(sw, se) / W, len(nw, sw) / D, len(ne, se) / D);
+  return Math.floor(Math.min(DETECT_PX_PER_M, source, DETECT_MAX_PX / (Math.max(W, D) + 2 * margin)) * 10) / 10;
+}
+
 // 호스트가 넣는 평면도 이미지: {source:'maestro', type:'plans', files:[File]}
 export function onPlans(handler) {
   addEventListener('message', e => { if (fromHost(e, 'plans') && Array.isArray(e.data.files)) handler(e.data.files.filter(f => f instanceof File)); });
@@ -14,7 +23,7 @@ export function onPlans(handler) {
 export async function askDetect(floors, rect, pxPerM, timeoutMs = 6 * 60 * 1000) {
   const c = document.createElement('canvas');
   c.width = rect.width; c.height = rect.height;
-  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rect.data), rect.width, rect.height), 0, 0);
+  c.getContext('2d').putImageData(new ImageData(rect.data instanceof Uint8ClampedArray ? rect.data : new Uint8ClampedArray(rect.data), rect.width, rect.height), 0, 0);
   const image = await new Promise(r => c.toBlob(r, 'image/png'));
   const id = 'detect-' + (++seq);
   return new Promise(resolve => {

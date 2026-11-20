@@ -74,16 +74,15 @@ export const pageFiles = (pages: Page[]) => Promise.all(pages.map(async (p, i) =
   return new File([await r.blob()], `${p.floor ?? `page-${i + 1}`}.png`, { type: 'image/png' })
 }))
 
-// 실내기 기호 인식: 보정 이미지 업로드(kind image) → POST /plans/detect → 상태 조회 → 결과
-// shortcut: 인식 결과 파일 형식은 규약 미정이라 {detections} 또는 초안의 floors[0].detections를 읽음, Lambda 확정 후 한 형식으로 정리
+// 실내기 기호 인식: 보정 이미지 업로드(kind image) → POST /plans/detect → 상태 조회 → draftUrl의 {floor, detections, model}
 export async function detect(building: string, image: Blob, pxPerM?: number): Promise<{ detections: Detection[]; key: string }> {
   const file = new File([image], 'plan.png', { type: 'image/png' })
   const { uploads } = await upload(building, 'image', [file])
   const key = uploads[0].key
   const { jobId } = await call<{ jobId: string }>('/plans/detect', post({ building, key, pxPerM }))
   const job = await poll(jobId)
-  const out = job.draftUrl ? await getJson<{ detections?: Detection[]; floors?: { detections?: Detection[] }[] }>(job.draftUrl) : {}
-  return { detections: out.detections ?? out.floors?.[0]?.detections ?? [], key }
+  const out = job.draftUrl ? await getJson<{ detections?: Detection[] }>(job.draftUrl) : {}
+  return { detections: out.detections ?? [], key }
 }
 
 // 확정 저장 어댑터: convert(호출 쪽이 넘기는 판매사 화면 변환 함수, src/admin/convert.ts의 toServer)가 있으면

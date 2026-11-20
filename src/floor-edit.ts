@@ -14,7 +14,7 @@ export type Detection = { cls: string; conf: number; box: [number, number, numbe
 export type PlanBackground = { key?: string; px: [number, number]; toPlan: Affine | null }
 export type PlanFloor = { id: string; rooms: PlanRoom[]; footprint?: Point[]; atrium?: boolean; openWalls?: Opening[]; partitions?: Segment[]; elevation?: number; background?: PlanBackground; detections?: Detection[] }
 export type IndoorUnit = { id: string; room: string; pos: Point; model?: string; type?: string; coolKw?: number; ratedKw?: number; source?: string; basis?: string
-  cls?: string; manual?: string; conf?: number; review?: boolean; rot?: number; size?: [number, number]; ref?: string }
+  cls?: string; manual?: string; conf?: number; review?: boolean; rot?: number; size?: [number, number]; ref?: string; floor?: string }
 export type Plan = {
   schema: 'twin.building/v1'
   building: { name: string; size: { w: number; d: number } }

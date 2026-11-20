@@ -190,7 +190,7 @@
 import * as P from './pipeline/pipeline-core.js';
 import * as EP from './pipeline/energyplus.js';
 import { detectPlanCorners, validCorners, floorNumber, occupiedFloorIds, expandFloorGroups, floorResultFor } from './pipeline/plan-upload.js';
-import { askDetect, onPlans } from './pipeline/host-bridge.js';
+import { askDetect, detectRes, onPlans } from './pipeline/host-bridge.js';
 
 /* ───────── 상태: 레시피(사람이 한 모든 결정) + 이미지 ───────── */
 const newFloor = id => ({ id, image:null, corners:null, mode:'auto', params:{ dark:40, sat:70, close:1, minArea:3.5 }, ops:[] });
@@ -904,13 +904,17 @@ function withDetections(json) {
 async function detectFloors(status) {
   DETECT = {}; DETECT_WARN = [];
   if (batchQuery.get('detect') !== '1' || window.parent === window) return;
+  const W = R.building.size.w, D = R.building.size.d;
   for (const floor of R.floors) {
-    const rect = RECT.get(floor.id)?.rect; if (!rect) continue;
+    const img = IMG.get(floor.image)?.data; if (!img || !floor.corners || !RECT.get(floor.id)?.rect) continue;
     status.textContent = floorLabel(floor) + ' 실내기 기호 인식 중…';
-    const ids = occupiedFloorIds(floor), res = await askDetect(ids, rect, P.RES);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    // 인식용 보정 이미지: 원본 이미지에서 최대 80px/m로 다시 보정(화면·벽 검출용 20px/m 보정 이미지는 그대로)
+    const pxPerM = detectRes(floor.corners, W, D, P.MARGIN), rect = P.rectify(img, floor.corners, W, D, pxPerM);
+    const ids = occupiedFloorIds(floor), res = await askDetect(ids, rect, pxPerM);
     if (res.error) DETECT_WARN.push(floorLabel(floor) + ' 실내기 기호 인식 생략: ' + res.error);
-    // 보정 이미지 픽셀 (u, v) → 평면 m: x = u / RES − MARGIN (rectify가 픽셀 i 중심을 (i + 0.5) / RES − MARGIN에 둠)
-    const background = { ...(res.key ? { key:res.key } : {}), px:[rect.width, rect.height], toPlan:[1 / P.RES, 0, -P.MARGIN, 0, 1 / P.RES, -P.MARGIN] };
+    // 보정 이미지 픽셀 (u, v) → 평면 m: x = u / pxPerM − MARGIN (rectify가 픽셀 i 중심을 (i + 0.5) / pxPerM − MARGIN에 둠)
+    const background = { ...(res.key ? { key:res.key } : {}), px:[rect.width, rect.height], toPlan:[1 / pxPerM, 0, -P.MARGIN, 0, 1 / pxPerM, -P.MARGIN] };
     for (const id of ids) DETECT[id] = { background, detections:res.detections || [] };
   }
 }

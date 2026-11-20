@@ -129,12 +129,13 @@ node tools/sim-server.mjs 8766
 | 방향 | 메시지 | 필드 | 처리 |
 |---|---|---|---|
 | 대시보드 → 파이프라인 | `plans` | `files`(File 목록) | 파일마다 층 행 1개(1F부터)를 만들고 평면도를 채움. PNG, JPG 업로드와 PDF 렌더링 페이지에 사용 |
-| 파이프라인 → 대시보드 | `detectRequest` | `id`, `floors`(층 id 목록), `image`(보정 평면도 PNG Blob), `pxPerM`(20) | `detect=1`일 때 3D 트윈 만들기 중 층 그룹마다 1회 요청 |
+| 파이프라인 → 대시보드 | `detectRequest` | `id`, `floors`(층 id 목록), `image`(인식용 보정 평면도 PNG Blob), `pxPerM`(인식용 해상도) | `detect=1`일 때 3D 트윈 만들기 중 층 그룹마다 1회 요청 |
 | 대시보드 → 파이프라인 | `detectResult` | `id`, `detections`(`{cls, conf, box}`, 보정 이미지 픽셀), `key`(S3 키), `error` | 대시보드가 `POST /plans/detect`로 인식. 서버가 없거나 실패하면 빈 목록과 `error` |
 | 파이프라인 → 대시보드 | `buildingRendered`(기존) | `building` | `detect=1`이면 층마다 `background`(`toPlan` = 보정 이미지 픽셀 → m), `detections`, `meta.ingest.warnings`를 붙임 |
 
 - 메시지는 `source`(`maestro` 또는 `twin`)와 부모 창과 iframe 창으로 출처를 확인합니다.
-- 보정 이미지 픽셀 (u, v)와 평면 좌표의 관계는 `x = u / 20 − 6`, `y = v / 20 − 6`입니다(`RES` 20px/m, `MARGIN` 6m).
+- 인식용 보정 이미지는 화면용 20px/m 보정 이미지와 따로, 원본 이미지에서 다시 보정합니다. 해상도 `pxPerM`은 인식 모델 학습 해상도 80px/m, 원본의 실제 해상도(외곽 4변 중 최대), 여백 포함 긴 변 8000px 중 가장 작은 값입니다(`pipeline/host-bridge.js` `detectRes`).
+- 인식용 보정 이미지 픽셀 (u, v)와 평면 좌표의 관계는 `x = u / pxPerM − 6`, `y = v / pxPerM − 6`입니다(`MARGIN` 6m).
 - 좌표 변환과 호실 배정은 대시보드(`src/ingest/units.ts`)가 합니다. 인식 결과가 있는 층은 면적 추정 실내기(`source: estimate`)를 빼고, 신뢰도 0.5 미만, `unknown`, 실 밖 실내기는 `review: true`로 표시합니다.
 - 대시보드가 응답하지 않으면 6분 뒤 빈 결과로 진행합니다. `detect=1`이 없으면 요청하지 않습니다.
 
