@@ -48,7 +48,7 @@
     --chart-cur:#2a78d6; --chart-prev:#929292;
     --scene-top:#f7f7f7; --scene-bot:#efefed;
     --shadow:rgba(0,0,0,.02) 0 0 0 1px, rgba(0,0,0,.04) 0 2px 6px 0, rgba(0,0,0,.1) 0 4px 8px 0;
-    --r-sm:8px; --r-md:14px; --r-full:9999px; --hover-stroke:3px;
+    --r-sm:8px; --r-md:14px; --r-full:9999px;
     color-scheme:light;
   }
   @media (prefers-color-scheme: dark){
@@ -203,8 +203,9 @@
   #floorView.pre:not(.in):not(.leaving) #plan .tint, #floorView.pre:not(.in):not(.leaving) #plan .chip, #floorView.pre:not(.in):not(.leaving) #plan .idu{animation:none;opacity:0}
   #floorView.leaving #plan *{animation:none !important}
   /* 층 보기 2D(평면도) ↔ 3D(같은 층을 기울여 본 모델) 전환: 오른쪽 위 */
-  #planMode{position:absolute;top:12px;right:12px;z-index:6;display:flex;padding:3px;gap:2px;border-radius:999px}
-  #planMode button{min-width:44px;height:32px;padding:0 12px;border-radius:999px;font-weight:600}
+  #planMode{position:absolute;top:12px;right:12px;z-index:6;display:flex;padding:3px;gap:2px;border-radius:var(--r-full);background:var(--surface-soft)}
+  #planMode button{min-width:44px;height:32px;padding:0 12px;border-radius:var(--r-full);font-weight:700}
+  #planMode button:not([aria-pressed="true"]):hover{background:var(--surface-strong)}
   #planMode button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
   body.plan3d #floorView{pointer-events:none}
   /* 3D에서 클릭을 받는 건 버튼·카드 자체만: 앱 안(hosted)에서는 #floorStats 상자가 화면 전체(inset)를 덮으므로 상자는 통과시키고 카드만 받음 */
@@ -216,11 +217,17 @@
   body.plan3d #planBox{background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
   #planBox{flex:1;min-width:0;position:relative;border-radius:var(--r-md);overflow:hidden;display:flex;flex-direction:column}
   #planWrap{flex:1;min-height:0;margin:0 12px;border-radius:var(--r-sm);background:var(--paper);box-shadow:inset 0 0 0 1px var(--hairline);overflow:hidden;position:relative}
-  #planWrap{background-image:radial-gradient(circle,color-mix(in srgb,var(--ink) 12%,transparent) .7px,transparent .9px);background-size:18px 18px}
+  #planWrap{background-image:radial-gradient(circle,color-mix(in srgb,var(--ink) 9%,transparent) .7px,transparent .9px);background-size:20px 20px}
   #plan{width:100%;height:100%;display:block}
   body.dk #plan .tint{mix-blend-mode:normal;fill-opacity:.24;stroke:var(--c);stroke-opacity:.9;stroke-width:3.5}
   #plan .tint{mix-blend-mode:multiply;fill-opacity:.6;cursor:pointer;transition:fill .6s ease, fill-opacity .2s;stroke:transparent;stroke-width:5}
-  #plan .room-hover{fill:none;stroke:var(--ink);stroke-width:var(--hover-stroke);stroke-linejoin:round;vector-effect:non-scaling-stroke;pointer-events:none}
+  #plan .room-lighting{pointer-events:none;opacity:0;transition:opacity 160ms ease}
+  #plan[data-room-focus] .room-lighting{opacity:1}
+  #plan .room-dim{fill:#141a24;fill-opacity:.09}
+  #plan .room-light{fill:white;fill-opacity:.12}
+  body.dk #plan .room-dim{fill-opacity:.16}
+  body.dk #plan .room-light{fill-opacity:.14}
+  @media (prefers-reduced-motion: reduce){#plan .room-lighting{transition:none}}
   /* 강조 호실: 선택 객체 규칙(디자인 시스템 표 6.1)대로 primary 외곽선, 깜빡임 없음 */
   #plan .tint.hl, body.dk #plan .tint.hl{stroke:var(--primary);stroke-opacity:1;stroke-width:8}
   @keyframes tintIn{from{opacity:0}}
@@ -234,6 +241,9 @@
   #plan .idu{pointer-events:none;stroke:var(--canvas)}
   #floorStats{display:flex;gap:8px;padding:12px;flex-wrap:wrap}
   #floorStats div{flex:1;min-width:120px;border:1px solid var(--hairline);border-radius:var(--r-sm);padding:8px 12px;background:linear-gradient(160deg,var(--canvas),var(--surface-soft));font-size:14px;color:var(--muted);font-weight:600}
+  #floorStats .floor-stat{display:flex;align-items:center;gap:8px;white-space:nowrap}
+  #floorStats .stat-icon{display:grid;place-items:center;width:28px;height:28px;flex:none;border-radius:var(--r-sm);background:var(--surface-strong);color:var(--body)}
+  #floorStats .stat-icon .i{width:15px;height:15px}
   #floorStats b{display:block;font-size:21px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:700;line-height:1.25}
   #floorStats b i{font-style:normal;font-size:14px;color:var(--muted);font-weight:500;margin-left:2px}
   #floorTabs{display:flex;gap:8px;padding:12px;align-items:center;overflow-x:auto}
@@ -249,11 +259,11 @@
   #tip input{width:100%;min-height:36px;padding:4px 8px;border:1px solid var(--hairline);border-radius:var(--r-sm);color:var(--ink);background:var(--canvas);font:inherit}
   #tip .tip-buttons{display:flex;gap:6px;margin-top:6px}
   #tip .tip-error{color:var(--error)}
-  #tip[data-room-tip]{width:max-content;min-width:min(216px,calc(100% - 16px));max-width:min(320px,calc(100% - 16px));padding:12px;border-radius:var(--r-md);overflow-wrap:anywhere}
+  #tip[data-room-tip]{width:max-content;min-width:min(224px,calc(100% - 16px));max-width:min(320px,calc(100% - 16px));padding:12px;border-radius:var(--r-md);overflow-wrap:anywhere}
   #tip .tip-heading{display:flex;align-items:center;gap:10px}
   #tip .tip-heading b{margin:0;font-size:16px;font-weight:700;line-height:1.3}
   #tip .tip-floor{flex:none;border:1px solid var(--hairline);border-radius:var(--r-full);padding:2px 8px;background:var(--surface-soft);color:var(--ink);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
-  #tip .tip-details{display:grid;gap:4px;border-top:1px solid var(--hairline-soft);margin-top:10px;padding-top:8px;font-size:13px}
+  #tip .tip-details{display:grid;gap:5px;margin-top:10px;padding:8px;border-radius:var(--r-sm);background:var(--surface-soft);font-size:13px}
   #tip .tip-details .row{color:var(--muted)}
   #tip .tip-details .row span:last-child{min-width:0;text-align:right;font-variant-numeric:tabular-nums}
   #tip[data-room-tip] .tip-buttons{justify-content:flex-end}
@@ -446,6 +456,7 @@
   body.hosted #floorStats .note{position:absolute;left:0;top:0;max-width:min(520px,100%);display:flex;gap:8px;align-items:flex-start;color:var(--body);line-height:1.4}
   body.hosted #floorStats .note svg.i{flex:none;width:16px;height:16px;margin-top:2px}
   /* 좁은 앱 화면: 지표 칸이 한 줄에 들어가지 않으면 두 줄, 평면도 아래 여백도 두 줄만큼 */
+  @media (max-width:800px){#floorStats .stat-icon{display:none}}
   @media (max-width:640px){ body.hosted #floorStats{flex-wrap:wrap;align-content:flex-end} body.hosted #floorStats div{min-width:0} body.hosted #planWrap{padding-bottom:132px} }
   @media (min-width:761px){ #floorView{padding-right:372px} }
   @media (max-width:760px){ #actions{display:none} #persona button span{display:none} }
@@ -643,9 +654,6 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 // 굵은 선(WebGL 기본 선은 굵기와 무관하게 1px): 호버 테두리
-import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { wallSpans } from './pipeline/wall-spans.js';
 import { foldedRoofGeometry } from './pipeline/folded-roof.js';
 
@@ -764,6 +772,7 @@ const IC = {
   dashed: svgI('<path d="M10.1 2.182a10 10 0 0 1 3.8 0"/><path d="M13.9 21.818a10 10 0 0 1-3.8 0"/><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"/><path d="M2.182 13.9a10 10 0 0 1 0-3.8"/><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"/><path d="M21.818 10.1a10 10 0 0 1 0 3.8"/><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"/><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"/>'),
   chevron: svgI('<path d="m9 18 6-6-6-6"/>'),
   pencil: svgI('<path d="M21 7 9 19l-5 1 1-5L17 3a2.8 2.8 0 0 1 4 4Z"/><path d="m15 5 4 4"/>'),
+  wind: svgI('<path d="M2 8h11a2 2 0 1 0-2-2M2 12h17a2 2 0 1 0-2-2M2 16h11a2 2 0 1 1-2 2"/>'),
   x: svgI('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
 };
 // 계산 메시지: '오류: '로 시작하면 아이콘과 오류 색으로 표시
@@ -1202,9 +1211,9 @@ const isDark = () => new THREE.Color(cssVar('--scene-bot') || '#d9e0eb').getHSL(
 function onThemeChange(){
   bg = bgTexture(); bScene.background = bg; bScene.fog.color.set(cssVar('--scene-bot')); if (room3d) room3d.scene.background = bg; applyGroundTheme();
   isDarkNow = isDark();
-  focusOutline = cssVar('--ink');
-  for (const grp of floorGroups) { const pm = grp.userData.planMat; pm.map = planTexture(grp.userData.floor); pm.color.set(isDarkNow ? 0xffffff : 0xc4ccd8); pm.needsUpdate = true;
-    grp.userData.slabMat.color.set(isDarkNow ? 0x5b5e63 : 0xc1c1c1); }
+  for (const grp of floorGroups) { const { floor, planMat, slabTone } = grp.userData;
+    planMat.map = planTexture(floor); planMat.needsUpdate = true;
+    slabTone.setHex(slabColor(floor, isDarkNow)); }
   applyAppearanceMaterials();
   for (const grp of floorGroups) if (grp.userData.labels) { grp.userData.labels.removeFromParent(); dispose(grp.userData.labels); grp.userData.labels = null; }
   if (state.view === 'floor' && state.floor) { buildPlanSvg(state.floor); updatePlanSvg(); if (tipRoom) markHoveredRoom(tipRoom); }
@@ -1272,17 +1281,7 @@ function loftGeometry(bot, top, h, N = 128){
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
   return { geo, b:B.pts, t:T, perim:B.perim };
 }
-function dispose(obj){ obj.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { FAT.delete(m); if (m.map) m.map.dispose(); m.dispose(); }); }); }
-// 굵은 선: 픽셀 단위 굵기, 화면 크기가 바뀌면 resize()가 해상도 갱신
-const FAT = new Set();
-const hoverStroke = parseFloat(cssVar('--hover-stroke'));
-let focusOutline = cssVar('--ink');
-function fatLines(seg, color, px){
-  const g = new LineSegmentsGeometry(); g.setPositions(seg);
-  const m = new LineMaterial({ color, linewidth:px, transparent:true, depthTest:false, depthWrite:false, toneMapped:false });
-  m.resolution.set(stage.clientWidth || 1, stage.clientHeight || 1); FAT.add(m);
-  const l = new LineSegments2(g, m); l.renderOrder = 8; return l;
-}
+function dispose(obj){ obj.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); }
 // 방 이름 홀로그램(층 3D, 건물 3D에서 마우스를 올린 층): 방 공간 안 높이 55%에 떠 있는 빛나는 글자, 항상 카메라를 향함
 function roomLabelTexture(name){
   const c = document.createElement('canvas'), g = c.getContext('2d'), font = '700 64px "SUIT Variable", SUIT, system-ui, "Malgun Gothic", sans-serif';
@@ -1460,11 +1459,13 @@ function applyGroundTheme(){
 applyGroundTheme();
 const warnTex = glowTexture('rgba(180,83,9,1)'), critTex = glowTexture('rgba(185,28,28,1)'), beamTex = beamTexture();
 const floorGroups = [], pickables = [];
+const slabColor = (f, dark) => f.green ? (dark ? 0x4f9a5e : 0x8cc28f) : (dark ? 0x5b5e63 : 0xc1c1c1);
 for (const f of FLOORS) {
   if (!f.plan) f.plan = drawPlan(f);
-  const grp = new THREE.Group(); grp.position.y = floorY(f.index); grp.userData = { floor:f, lift:0, fade:1, intro:0 };
-  const slab = new THREE.Mesh(slabGeometry(f.hasVoid, .3, .3, f.shellFootprint || f.footprint), new THREE.MeshStandardMaterial({ color:f.green ? (isDark() ? 0x4f9a5e : 0x8cc28f) : isDark() ? 0x5b5e63 : 0xc1c1c1, roughness:.92, metalness:0, envMapIntensity:.35, transparent:true }));
+  const grp = new THREE.Group(); grp.position.y = floorY(f.index); grp.userData = { floor:f, lift:0, fade:1, focusLight:1, planLight:1 };
+  const slab = new THREE.Mesh(slabGeometry(f.hasVoid, .3, .3, f.shellFootprint || f.footprint), new THREE.MeshStandardMaterial({ color:slabColor(f,isDark()), roughness:.92, metalness:0, envMapIntensity:.35, transparent:true }));
   slab.userData.floor = f; grp.add(slab); pickables.push(slab); grp.userData.slabMat = slab.material;
+  grp.userData.slabTone = slab.material.color.clone();
   // 평면도 판: 층 윤곽(footprint) 모양으로 잘라 바닥판과 크기를 맞춤 (중정은 비움)
   const ps = footShapes(f.footprint);
   if (f.hasVoid) ps[0].holes.push(new THREE.Path([new THREE.Vector2(VOID.x0, -VOID.y0), new THREE.Vector2(VOID.x0, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y0)]));
@@ -1494,7 +1495,7 @@ for (const f of FLOORS) {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(.35, .35, 14, 16, 1, true),
       new THREE.MeshBasicMaterial({ map:beamTex, color:0xb91c1c, transparent:true, opacity:.5, depthWrite:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide }));
     beam.position.copy(toWorld(r.b.cx, r.b.cy, h + 7)); beam.visible = false; grp.add(beam);
-    grp.userData.blocks.push({ r, mesh, edges, beacon, beam });
+    grp.userData.blocks.push({ r, mesh, edges, beacon, beam, tone:mat.color.clone(), focusLight:1 });
   }
   // mini indoor units (visible in "설비 연결" mode)
   grp.userData.idus = [];
@@ -1509,7 +1510,10 @@ for (const f of FLOORS) {
   const shellMat = f.below
     ? new THREE.MeshStandardMaterial({ color:isDark() ? 0x5d636e : 0x9aa1ab, transparent:true, opacity:.16, roughness:.95, metalness:0, depthWrite:false, side:THREE.BackSide })
     : new THREE.MeshPhysicalMaterial({ color:facade?.glassColor ?? 0xaecbff, transparent:true, opacity:exteriorFirst ? .2 : facade?.glassOpacity ?? .06, roughness:facade?.roughness ?? (exteriorFirst ? .38 : .05), metalness:facade?.metalness ?? 0, envMapIntensity:exteriorFirst ? .65 : 1.2, depthWrite:false, side:f.top || exteriorFirst ? THREE.DoubleSide : THREE.BackSide });
-  if (!f.below && !f.open) grp.userData.shellMat = shellMat;
+  if (!f.below && !f.open) {
+    grp.userData.shellMat = shellMat;
+    grp.userData.shellTone = shellMat.color.clone();
+  }
   const lineMat = new THREE.LineBasicMaterial({ color:facade?.mullionColor ?? 0x9fb3cf, transparent:true, opacity:diagrid ? .5 : .22 }), seg = [], frameSeg = [];
   const pushLoop = (l, y, out) => l.forEach(([x0, y0], i) => { const [x1, y1] = l[(i + 1) % l.length], a = toWorld(x0, y0), b = toWorld(x1, y1); out.push(a.x, y, a.z, b.x, y, b.z); });
   if (f.open) {
@@ -1546,10 +1550,8 @@ for (const f of FLOORS) {
   if (seg.length && !f.below) { const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
     const mull = new THREE.LineSegments(mg, lineMat); grp.add(mull); grp.userData.mullMat = mull.material; }
   const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(frameSeg, 3));
-  const frame = new THREE.LineSegments(fg, new THREE.LineBasicMaterial({ color:0x7b8798, transparent:true, opacity:.45 }));
+  const frame = new THREE.LineSegments(fg, new THREE.LineBasicMaterial({ color:0x8b99ad, transparent:true, opacity:.45 }));
   grp.add(frame); grp.userData.frame = frame;
-  // 마우스를 올린 층의 굵은 테두리(3px): 기본 테두리 1px은 구분이 어려움
-  const hotFrame = fatLines(frameSeg, focusOutline, hoverStroke); hotFrame.visible = false; grp.add(hotFrame); grp.userData.hotFrame = hotFrame;
   { // neon edge ring per floor (coloured by the floor's average of the current metric)
     const t = .09, parts = loops.flatMap(loop => loop.map(([x0, y0], i) => { const [x1, y1] = loop[(i + 1) % loop.length], L = Math.hypot(x1 - x0, y1 - y0); if (L < .01) return null;
       const g = new THREE.BoxGeometry(L + t, t, t); g.rotateY(-Math.atan2(y1 - y0, x1 - x0)); const c = toWorld((x0 + x1) / 2, (y0 + y1) / 2); return g.translate(c.x, .03, c.z); })).filter(Boolean);
@@ -1606,8 +1608,9 @@ if (!topFloor.open) {
 }
 function applyAppearanceMaterials(){
   if (polishedExterior) {
-    for (const { userData:{ shellMat } } of floorGroups) if (shellMat) {
+    for (const { userData:{ shellMat,shellTone } } of floorGroups) if (shellMat) {
       shellMat.color.set(appearance.facadeColor);
+      shellTone.copy(shellMat.color);
       shellMat.roughness = Math.max(shellMat.roughness,.54);
       shellMat.envMap = ENV;
       shellMat.envMapIntensity = .26;
@@ -1822,7 +1825,7 @@ function placeTags(it){
     }
     bx = Math.min(bx + 6, rc.width - el.offsetWidth - 6);   // 오른쪽 끝을 넘으면 안쪽으로 (전력 차트가 잘리지 않게)
     el.style.transform = `translate(${bx.toFixed(1)}px, ${(by - 14).toFixed(1)}px)`;
-    el.style.opacity = explodeF ? 0 : it > 2.2 + f.index * .12 ? (hoverFloor && hoverFloor !== f ? .35 : 1) : 0;
+    el.style.opacity = explodeF ? 0 : it > 2.2 + f.index * .12 ? (hoverFloor && hoverFloor !== f ? .78 : 1) : 0;
     el.classList.toggle('hot', hoverFloor === f);
   }
 }
@@ -1831,7 +1834,7 @@ function recolorBuilding(){
   const act = actionsByRoom();
   for (const grp of floorGroups) {
     for (const bk of grp.userData.blocks) {
-      bk.tc = bk.tc || new THREE.Color().copy(bk.mesh.material.color);
+      bk.tc = bk.tc || bk.tone.clone();
       colorInto(state.metric, metricValue(bk.r, state.metric), bk.tc);
       const lv = markLv(bk.r, act);
       bk.beacon.visible = lv > 0; bk.beacon.material.map = lv === 2 ? critTex : warnTex;
@@ -1855,6 +1858,9 @@ function updateBuilding(t, dt){
   const it = reduceMotion ? 99 : t - introStart, hlOn = performance.now() < HL.until, pulse = 1;   // 깜빡임 금지: 강조는 고정 밝기
   const showArchitecture = polishedExterior && !explodeF && !state.pipes;
   const interior = showArchitecture ? appearance.interiorBrightness : 1;
+  const focusedFloor = explodeF ? null : hoverFloor;
+  const focusedRoom = explodeF && plan3d && !planAnim ? tipRoom : null;
+  const focusStep = reduceMotion || !dt ? 1 : 1 - Math.exp(-dt * 16);
   if (soil) soil.visible = !showArchitecture;
   { // scan sweep: 처음 한 번만 건물을 훑으며 드러냄 (10초마다 반복하던 훑기는 화면이 번쩍여 보여 뺌)
     const top = roofY + 1.5, ph = (it - 1.2) / 2.6, on = !reduceMotion && ph > 0 && ph < 1 && !state.pipes && !showArchitecture;
@@ -1865,39 +1871,45 @@ function updateBuilding(t, dt){
   { const pa = dustGeo.attributes.position; dustMat.uniforms.uTime.value = t; dust.visible = isDarkNow;
     if (isDarkNow) { for (let i = 0; i < DUSTN; i++) { let y = pa.getY(i) + dt * dustV[i]; if (y > 42) y = 0; pa.setY(i, y); } pa.needsUpdate = true; dust.rotation.y = t * .01; } }
   for (const grp of floorGroups) {
-    const f = grp.userData.floor, hot = hoverFloor === f;
+    const f = grp.userData.floor, hot = focusedFloor === f;
     const k = clamp((it - f.index * .22) / 1.1, 0, 1), e = showArchitecture ? 1 : 1 - Math.pow(1 - k, 3);
     const up = explodeF && f.index > explodeF.index;
-    grp.userData.lift = lerp(grp.userData.lift, explodeF ? (up ? 8 + (f.index - explodeF.index) * 6 : f === explodeF ? 1.2 : 0) : hot && !showArchitecture ? .8 : 0, explodeF ? .07 : .12);
-    grp.userData.fade = lerp(grp.userData.fade, explodeF ? (f === explodeF ? 1 : up ? 0 : .1) : hoverFloor && !hot && !showArchitecture ? .28 : 1, explodeF ? .08 : .15);
+    grp.userData.lift = lerp(grp.userData.lift, explodeF ? (up ? 8 + (f.index - explodeF.index) * 6 : f === explodeF ? 1.2 : 0) : 0, explodeF ? .07 : .12);
+    grp.userData.fade = lerp(grp.userData.fade, explodeF ? (f === explodeF ? 1 : up ? 0 : .1) : 1, explodeF ? .08 : .15);
+    const activeRoom = focusedRoom?.floorId === f.id ? focusedRoom : null;
+    const focusLight = grp.userData.focusLight = lerp(grp.userData.focusLight, hot ? 1.20 : focusedFloor ? .82 : 1, focusStep);
+    grp.userData.planLight = lerp(grp.userData.planLight, activeRoom ? .82 : 1, focusStep);
+    const planLight = grp.userData.planLight * focusLight;
     grp.position.y = floorY(f.index) + grp.userData.lift + (1 - e) * 22;
     const fade = grp.userData.fade * e;
-    if (polishedExterior && grp.userData.shellMat) {
-      grp.userData.shellMat.opacity = fade * (showArchitecture ? appearance.facadeOpacity : Math.min(appearance.facadeOpacity, .17));
+    const { shellMat, shellTone, planMat, slabMat, slabTone, coreMat } = grp.userData;
+    if (shellMat) {
+      shellMat.color.copy(shellTone).multiplyScalar(focusLight);
+      if (polishedExterior) shellMat.opacity = fade * (showArchitecture ? appearance.facadeOpacity : Math.min(appearance.facadeOpacity, .17));
     }
-    grp.userData.frame.material.color.set(hot ? focusOutline : 0x8b99ad);
-    grp.userData.hotFrame.visible = hot && !explodeF && !f.below;
-    if (grp.userData.hotFrame.visible) { grp.userData.hotFrame.material.color.set(focusOutline); grp.userData.hotFrame.material.opacity = e; }
     { // 방 이름 홀로그램: labelFloor(층 3D의 층, 건물 3D의 마우스 올린 층)만
       const showL = labelFloor === f && !showArchitecture && !state.pipes;
       if (showL && !grp.userData.labels) buildRoomLabels(grp);
       const L = grp.userData.labels;
       if (L) { L.visible = showL; if (showL) for (const s of L.children) s.material.opacity = .95 * fade; } }
-    grp.userData.frame.material.opacity = (hot ? 1 : showArchitecture ? .16 : .4) * e;
-    if (grp.userData.mullMat) grp.userData.mullMat.opacity = (showArchitecture ? exteriorFirst ? .18 : .10 : hot ? .45 : .2) * fade;
+    grp.userData.frame.material.opacity = (showArchitecture ? .16 : .4) * e;
+    if (grp.userData.mullMat) grp.userData.mullMat.opacity = (showArchitecture ? exteriorFirst ? .18 : .10 : .2) * fade;
     { // 네온 색·밝기는 목표값으로 천천히 (1초마다 값이 바뀔 때 블룸 때문에 번쩍이지 않게)
       const nm = grp.userData.neon.material, sm = 1 - Math.exp(-dt * 2.5);
       (grp.userData.neonS ||= grp.userData.neonC.clone()).lerp(grp.userData.neonC, sm);
-      grp.userData.boost = lerp(grp.userData.boost ?? 1.6, hot || explodeF === f ? 2.4 : 1.6, 1 - Math.exp(-dt * 6));
+      grp.userData.boost = lerp(grp.userData.boost ?? 1.6, explodeF === f ? 2.4 : 1.6, 1 - Math.exp(-dt * 6));
       nm.color.copy(grp.userData.neonS);
       if (grp.userData.crit) nm.color.lerp(_c.setHex(0xb91c1c), .35 + .45 * pulse);
-      nm.color.multiplyScalar(grp.userData.boost); nm.opacity = (hot || explodeF === f ? 1 : showArchitecture ? .13 + interior*.24 : .85) * fade; }
-    grp.userData.planMat.opacity = fade * (state.pipes ? .3 : showArchitecture && !f.open ? interior * .42 : 1);   // 반투명 외피 안으로 층 평면·방이 보이게
-    grp.userData.planMat.visible = grp.userData.planMat.opacity > .01;
-    grp.userData.slabMat.opacity = e * (explodeF ? grp.userData.fade : showArchitecture && !f.open ? .32 + interior*.32 : 1);
+      nm.color.multiplyScalar(grp.userData.boost); nm.opacity = (explodeF === f ? 1 : showArchitecture ? .13 + interior*.24 : .85) * fade; }
+    planMat.color.setHex(isDarkNow ? 0xffffff : 0xc4ccd8).multiplyScalar(planLight);
+    planMat.opacity = fade * (state.pipes ? .3 : showArchitecture && !f.open ? interior * .42 : 1);
+    planMat.visible = planMat.opacity > .01;
+    slabMat.color.copy(slabTone).multiplyScalar(planLight);
+    slabMat.opacity = e * (explodeF ? grp.userData.fade : showArchitecture && !f.open ? .32 + interior*.32 : 1);
     grp.visible = grp.userData.fade > .01 && (!showArchitecture || !f.below);
-    grp.userData.coreMat.visible = !showArchitecture;
-    grp.userData.coreMat.opacity = .92 * fade * (state.pipes ? .3 : 1);
+    coreMat.color.setHex(0xb7c0cc).multiplyScalar(planLight);
+    coreMat.visible = !showArchitecture;
+    coreMat.opacity = .92 * fade * (state.pipes ? .3 : 1);
     const blockK = state.pipes ? .18 : interior;
     const grow = clamp((it - f.index * .22 - .6) / .8, 0, 1);
     const sweep = scanY == null ? 0 : 1;
@@ -1905,14 +1917,18 @@ function updateBuilding(t, dt){
       bk.mesh.visible = bk.edges.visible = interior > 0;
       bk.beacon.visible = bk.r.alert.level > 0;
       bk.beam.visible = bk.r.alert.level === 2;
-      if (bk.tc) { bk.mesh.material.color.lerp(bk.tc, .08); bk.mesh.material.emissive.copy(bk.mesh.material.color); bk.edges.material.color.copy(bk.mesh.material.color).lerp(_c.setHex(0xffffff), .55); }
+      if (bk.tc) bk.tone.lerp(bk.tc, .08);
+      bk.focusLight = lerp(bk.focusLight, activeRoom === bk.r ? 1.22 : activeRoom ? .80 : 1, focusStep);
+      bk.mesh.material.color.copy(bk.tone).multiplyScalar(focusLight * bk.focusLight);
+      bk.mesh.material.emissive.copy(bk.mesh.material.color);
+      bk.edges.material.color.copy(bk.tone).lerp(_c.setHex(0xffffff), .55);
       bk.mesh.scale.y = Math.max(.001, 1 - Math.pow(1 - grow, 3));
       bk.edges.scale.y = bk.mesh.scale.y;
       bk.mesh.material.opacity = bk.mesh.userData.baseOpacity * fade * blockK;
       bk.edges.material.opacity = .55 * fade * blockK;
       const hl = hlOn && HL.ids.has(bk.r.id);
       const sc = sweep ? Math.exp(-Math.pow((grp.position.y + CEIL / 2 - scanY) / 1.6, 2)) : 0;
-      bk.mesh.material.emissiveIntensity = (hl ? .5 + .6 * pulse : (hot ? .32 : .18) * interior) + sc * .9;
+      bk.mesh.material.emissiveIntensity = (hl ? .5 + .6 * pulse : .18 * interior) + sc * .9;
       if (hl) bk.mesh.material.opacity = Math.max(bk.mesh.material.opacity, .8);
       if (bk.beacon.visible) { const s = 1.6; bk.beacon.scale.set(s, s, s); bk.beacon.material.opacity = fade; }
       if (bk.beam.visible) bk.beam.material.opacity = (.25 + .25 * pulse) * fade;
@@ -2751,12 +2767,17 @@ function buildPlanSvg(f, intro = false){
   // 평면도 그림을 층 윤곽(footprint)으로 잘라 냄 — 3D 바닥판과 같은 모양 (중정은 비움)
   const fl = f.footprint || [[[0, 0], [W, 0], [W, D], [0, D]]];
   const clipD = fl.map(l => 'M' + l.map(P).join('L') + 'Z').join('') + (f.hasVoid ? 'M' + [[VOID.x0, VOID.y0], [VOID.x1, VOID.y0], [VOID.x1, VOID.y1], [VOID.x0, VOID.y1]].map(P).join('L') + 'Z' : '');
-  let html = `<defs><clipPath id="planClip"><path clip-rule="evenodd" d="${clipD}"/></clipPath></defs><image href="${isDark() ? p.srcDark : p.src}" x="0" y="0" width="${p.w}" height="${p.h}" clip-path="url(#planClip)"/>`;
+  const bounds = `width="${p.w}" height="${p.h}"`;
+  let html = `<defs><clipPath id="planClip"><path clip-rule="evenodd" d="${clipD}"/></clipPath>
+    <mask id="roomFocusMask" maskUnits="userSpaceOnUse" x="0" y="0" ${bounds}><rect ${bounds} fill="white"/><path fill="black" fill-rule="evenodd"/></mask>
+    </defs><image href="${isDark() ? p.srcDark : p.src}" x="0" y="0" ${bounds} clip-path="url(#planClip)"/>`;
   const dly = r => `animation-delay:${(120 + (r.b.cx / W) * 520 + (r.b.cy / D) * 160).toFixed(0)}ms`;
   const RS = f.rooms.filter(r => r.acs.length);
   html += '<g>' + f.rooms.filter(r => r.type === 'room' && !r.acs.length).map(r =>
     `<path class="room-hit" data-id="${esc(r.id)}" fill-rule="evenodd" d="${[r.poly,...(r.poly.holes || [])].map(l=>'M'+l.map(P).join('L')+'Z').join('')}"/>`).join('') + '</g>';
   html += '<g>' + RS.map(r => `<path class="tint" data-id="${r.id}" style="${dly(r)}" fill-rule="evenodd" d="${[r.poly, ...(r.poly.holes || [])].map(l => 'M' + l.map(P).join('L') + 'Z').join('')}"/>`).join('') + '</g>';
+  html += `<g class="room-lighting" clip-path="url(#planClip)" aria-hidden="true">
+    <rect class="room-dim" ${bounds} mask="url(#roomFocusMask)"/><path class="room-light" fill-rule="evenodd"/></g>`;
   // 실내기 유형(cls)이 있으면 유형별 기호, 없으면(이전 데이터) 원
   html += '<g>' + f.rooms.flatMap(r => r.acs.map(a => a.cls ? iduSymbolSvg(a, p.ox + a.x*p.S, p.oy + a.y*p.S)
     : `<circle class="idu" data-a="${a.id}" cx="${p.ox + a.x*p.S}" cy="${p.oy + a.y*p.S}" r="7" stroke="#fff" stroke-width="2.5"/>`)).join('') + '</g>';
@@ -2767,7 +2788,7 @@ function buildPlanSvg(f, intro = false){
     return (showChip ? `<g class="chip" data-id="${r.id}" style="animation-delay:${(500 + (r.b.cx / W) * 520).toFixed(0)}ms" transform="translate(${cx},${cy})"><rect rx="8" ry="8"/><text text-anchor="middle" dominant-baseline="central"></text></g>` : '') + `
             <g class="badge" data-id="${r.id}" transform="translate(${bx},${by})" style="display:none"><circle r="13"/><text text-anchor="middle" dominant-baseline="central" y="1">!</text></g>`;
   }).join('') + '</g>';
-  svg.innerHTML = html + '<path class="room-hover" fill-rule="evenodd" aria-hidden="true"/>';
+  svg.innerHTML = html;
   planRefs = RS.map(r => ({ r, tint:svg.querySelector(`.tint[data-id="${r.id}"]`), chip:svg.querySelector(`.chip[data-id="${r.id}"]`), badge:svg.querySelector(`.badge[data-id="${r.id}"]`),
     idus:r.acs.map(a => [a, svg.querySelector(`.idu[data-a="${a.id}"]`)]) }));
 }
@@ -2824,8 +2845,15 @@ function renderFloorStats(){
   const a = floorAgg(f.rooms), on = a.acs.filter(x => x.status === 'on').length;
   const floorNote = f.note ? '<div class="note">' + IC.info + esc(f.note) + "</div>" : "";
   if (f.note && !a.acs.length) { setHTML($("#floorStats"), floorNote); return; }
-  setHTML($('#floorStats'), floorNote + `<div>평균 온도<b>${a.temp.toFixed(1)}<i>°C</i></b></div><div>평균 습도<b>${Math.round(a.hum)}<i>%</i></b></div>
-    <div>전력<b>${a.power.toFixed(1)}<i>kW</i></b></div><div>${occName(f.rooms)}<b>${a.occ}<i>명</i></b></div><div>실내기 가동<b>${on}<i>/ ${a.acs.length}</i></b></div>`);
+  const stats = [
+    ['평균 온도',a.temp.toFixed(1),'°C',svgI(ICON.temp)],
+    ['평균 습도',Math.round(a.hum),'%',svgI(ICON.hum)],
+    ['전력',a.power.toFixed(1),'kW',svgI(ICON.power)],
+    [occName(f.rooms),a.occ,'명',svgI(ICON.occ)],
+    ['실내기 가동',on,`/ ${a.acs.length}`,IC.wind],
+  ];
+  setHTML($('#floorStats'), floorNote + stats.map(([label,value,unit,icon]) =>
+    `<div class="floor-stat"><span class="stat-icon">${icon}</span><span>${label}<b>${value}<i>${unit}</i></b></span></div>`).join(''));
 }
 $('#floorTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b && FLOOR[b.dataset.f] !== state.floor) goFloor(FLOOR[b.dataset.f]); });
 
@@ -3465,30 +3493,30 @@ const tip = $('#tip');
 let tipRoom = null, tipAnchor = null, tipExit, renameSequence = 0, renameRequest = null;
 let roomHoverMark = null;
 function markHoveredRoom(room){
-  const outline = svg.querySelector('.room-hover');
+  svg.removeAttribute('data-room-focus');
   if (roomHoverMark) {
     roomHoverMark.removeFromParent();
     dispose(roomHoverMark);
     roomHoverMark = null;
   }
-  if (!room) { outline?.removeAttribute('d'); return; }
+  if (!room) return;
   if (!plan3d) {
     const path = svg.querySelector(`path[data-id="${CSS.escape(room.id)}"]`);
-    if (path && outline) outline.setAttribute('d', path.getAttribute('d'));
+    if (!path) return;
+    const d = path.getAttribute('d');
+    svg.querySelector('#roomFocusMask path').setAttribute('d',d);
+    svg.querySelector('.room-light').setAttribute('d',d);
+    svg.setAttribute('data-room-focus','');
     return;
   }
-  if (!room.poly?.length) return;
-  // 건물 보기의 층 외곽선처럼 방의 윤곽만 표시해 지표 색상이 보이게 한다.
-  const segments = [], top = room.type === 'room' && room.acs.length ? CEIL + .06 : .06;
-  for (const loop of [room.poly, ...(room.poly.holes || [])]) {
-    for (let i=0; i<loop.length; i++) {
-      const a = toWorld(...loop[i]), b = toWorld(...loop[(i+1)%loop.length]);
-      segments.push(a.x,top,a.z,b.x,top,b.z);
-    }
-  }
-  roomHoverMark = fatLines(segments, focusOutline, hoverStroke);
-  roomHoverMark.material.depthTest = true;
-  floorGroups[room.floorIndex].add(roomHoverMark);
+  const group = floorGroups[room.floorIndex];
+  if (!room.poly?.length || group.userData.blocks.some(b => b.r === room)) return;
+  // 입체 블록이 없는 방은 평면 위에 얕은 조명만 얹는다.
+  const geometry = new THREE.ShapeGeometry(shapeOf(room.poly));
+  geometry.rotateX(-Math.PI/2).translate(-W/2,.03,-D/2);
+  roomHoverMark = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.16, depthWrite:false }));
+  roomHoverMark.renderOrder = 1;
+  group.add(roomHoverMark);
 }
 const localRename = window.parent === window && !params.has('building') && !params.has('data') && DATA_FROM.building === '직접 넣은 파일';
 const canRenameRoom = r => r.type === 'room' && (localRename || HOST.canRename && HOST.renameRooms.has(r.id));
@@ -3657,7 +3685,7 @@ canvas.addEventListener('pointerup', e => {
 });
 
 /* ═════════════════════════ loop / resize / visibility ═════════════════════════ */
-function resize(){ const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); for (const m of FAT) m.resolution.set(w, h); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); if (state.view === 'floor' && state.floor && !plan3d && !planAnim && typeof renderBackdrop === 'function') renderBackdrop(state.floor); }
+function resize(){ const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); if (state.view === 'floor' && state.floor && !plan3d && !planAnim && typeof renderBackdrop === 'function') renderBackdrop(state.floor); }
 new ResizeObserver(resize).observe(stage); resize();
 let visible = true;
 document.addEventListener('visibilitychange', () => { visible = !document.hidden; });
