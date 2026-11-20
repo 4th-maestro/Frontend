@@ -5,7 +5,7 @@
 | 경로 | 내용 |
 |---|---|
 | `src/App.tsx` | 해시 경로, 머리글(전체 현황 링크, 건물 선택, 층 탭), 건물 화면 탭(운영, 전력 분석), 밝은/어두운 화면 전환 |
-| `src/App.tsx` 운영 탭 | 상단: 운영 상태 카드(운전 중, 정지, 이상 감지, 재실 인원)와 전력·요금 카드(현재 전력, 오늘 누적 사용량, 오늘 전기요금 추정, 마지막 줄 전력 추이). 왼쪽 열: 3D 트윈, 선택 호실 HVAC 상태, 오늘 스케줄. 오른쪽 열: AI 응답, 이상 감지, 최적 제어 추천. 한 열 화면은 3D 다음에 오른쪽 열 |
+| `src/App.tsx` 운영 탭 | 상단: 운영 상태 카드(운전 중, 정지, 이상 감지, 재실 인원)와 전력·요금 카드(현재 전력, 오늘 누적 사용량, 오늘 전기요금 추정, 마지막 줄 전력 추이). 왼쪽 열: 3D 트윈, 선택 호실 HVAC 상태, 오늘 스케줄. 오른쪽 열: AI 운영 도우미(머리글 추천 배지와 대화 위 추천 펼침 목록), 이상 감지. 한 열 화면은 3D 다음에 오른쪽 열 |
 | `src/portfolio/Portfolio.tsx` | 전체 현황: 전체 요약 4개, 건물 카드(점검 필요 순), 카드 아래 `compare` 영역 |
 | `src/heat.ts` | 지표별 순차 색 척도 |
 | `src/twin.ts` | 3D 트윈 iframe 연동([규약](../docs/human/reference/twin-embed.md)): 트윈·파이프라인 주소(`theme=light\|dark` 포함), 테마 전환 메시지 `{source:'maestro', type:'theme', theme}`(iframe 로드 시, 테마 전환 시), 서버 건물의 `needBuilding` 요청에 `GET /buildings/{id}/twin` 응답 전달(없으면 `null`) |
@@ -20,16 +20,18 @@
 | `src/admin/convert.ts` | 트윈 `building.json` → 서버 저장 형식 `{twin, rooms, plan}` 변환. 건물 id `b-` + 소문자·숫자 8자(브라우저 생성), 모든 호실 id와 호실 참조에 `<건물 id>.` 접두어(이미 붙은 값은 유지). `rooms`는 실내기가 있는 실만(`web-demo.js` `webStatus` 기준), `plan`은 같은 호실의 내장 3D 형식([도면 저장 규약](../docs/human/reference/plan-storage.md), y 부호 반전). 자가 점검 `node src/admin/convert.check.mjs` |
 | `src/settings/SettingsPage.tsx` | 고객사 기업 정보(`#/settings`, 조회 전용): 기본 정보(기업 코드 미표시), 건물(용도, 층·호실 수, 운영 시간, 주말 운영), 변경 이력(최신 50건). 수정 기능 없음 |
 | `src/ai/ChartView.tsx` | AI 답변 그래프: 막대(한 색, 값 글자), 선(이번 기간 실선, 이전 기간 점선, 마우스·키보드 값 표시), 그래프·표 전환, 크게 보기 창(`<dialog>`) |
-| `src/ai/ChatPanel.tsx` | AI 운영 도우미(말풍선 대화, 처리 단계 접기, 초안 카드와 저장 안내, 근거 문서 목록(`sources`, http(s) 링크만, 새 탭), 대상 호실 3D 보기, 대화 지우기). 기록은 `GET /chat`, 실패 시 화면에만 기록 |
+| `src/ai/ChatPanel.tsx` | AI 운영 도우미(말풍선 대화, 처리 단계 접기, 초안 카드와 저장 안내, 근거 문서 목록(`sources`, http(s) 링크만, 새 탭), 대상 호실 3D 보기, 대화 지우기, 머리글 최적 제어 추천 배지). 기록은 `GET /chat`, 실패 시 화면에만 기록 |
+| `src/ai/ChatRecommend.tsx` | 최적 제어 추천: 머리글 배지 "추천 N"(누름 높이 44px, 기본 접힘), 대화 위 펼침 목록(카드 높이 절반까지, 내부 스크롤). 목록은 예상 절감 합계와 건수, 데이터 기준(시뮬레이터 적용 전후 비교, 가상), 절감량 큰 순 항목(규칙, 호실, HVAC, 근거, 절감량, 3D에서 보기, 초안 만들기). 건물 전체 보기는 항목에 층 이름 표시 |
+| `src/ai/useRecommend.ts` | 최적 제어 추천 조회 훅(`GET /recommendations`, 층이 비어 있으면 건물 전체). 60초 주기, 스케줄 저장 후 다시 조회 |
 | `src/ops/` | 자동 운영 화면: `OpsMessages.tsx`(AI 운영 도우미 대화 안 알림 카드와 마지막 상태 메시지의 ON/OFF 스위치), `types.ts`(응답 형식), `mock.ts`(API 없는 목업, 건물별 메모리). 규칙은 [자동 운영 화면 규약](../docs/human/reference/auto-operations.md) |
 | `src/twin3d/Twin3D.tsx` | Three.js 층 3D 트윈: 도면 API(`GET /buildings/{id}/plan`, 실패 시 `public/floorplans/<건물>.json`) 호실 다각형, 지표 색, HVAC 운전·이상 표시, 호실 선택, 시점 초기화·위에서 보기 |
 | `src/api.ts` | Lambda API 호출(모든 조회에 `building` 전달), 실패하면 목업으로 대체하고 화면에 목업 표시. 건물 목록(`GET /buildings`)은 목업 대체 없이 오류 표시. `GET /me`, `POST /me/join`, 기업 정보 조회 API(`GET /company`, `GET /company/audit`), 트윈 조회(`GET /buildings/{id}/twin`), 판매사 관리 API(`/admin/companies`, `/admin/buildings`, `/admin/users`, 건물 추가 `POST /admin/companies/{id}/buildings`, 정보 수정 `PATCH /admin/buildings/{id}`, 삭제 `DELETE /admin/buildings/{id}`), 도면 교체·편집 저장(`PUT /buildings/{id}/twin`, 판매사 권한은 서버 판정)는 목업 대체 없이 오류 표시. 도면 본문이 5MB를 넘으면 보내기 전에 안내. 403 `COMPANY_SUSPENDED`는 서비스 중지 화면 전환 이벤트(`SUSPENDED`) 발생 |
 | `src/ai/useAsk.ts` | AI 질의 훅. `buildingId` 전송, WebSocket 단계 이벤트 수신, 연결 실패 시 `api.ts` 질의로 대체, 45초 제한 |
 | `src/ai/ThinkingPanel.tsx` | AI 사고 과정 패널(단계, 조건 칩, 스트리밍 답변)과 진행 표시 `ThinkingBadge` |
 | `src/mock.ts` | 목업: 건물별 데모 상태, 정규식 기반 질의 해석 |
-| `src/panels/` | 운영 패널 4종: 최적 제어 추천, 이상 감지, 오늘 스케줄(세로 시간표: 시작 시각부터 그날 끝까지 칸, 지금 선, 칸 선택 시 상세와 취소, 층 선택 버튼으로 층별 보기), 전력 추이(전력·요금 카드 안 오늘·어제 SVG 추이선). 60초마다 다시 조회 |
+| `src/panels/` | 운영 패널 3종: 이상 감지, 오늘 스케줄(세로 시간표: 시작 시각부터 그날 끝까지 칸, 지금 선, 칸 선택 시 상세와 취소, 층 선택 버튼으로 층별 보기), 전력 추이(전력·요금 카드 안 오늘·어제 SVG 추이선). 60초마다 다시 조회 |
 | `src/energy/` | 에너지 분석: `BuildingCompare`(건물별 kWh·1㎡당·전기요금 막대), `EnergyPage`(일·주·월 추이, 사용 구성 흐름도, 최근 4주 요일×시간 히트맵). API 실패 시 `mock.ts` 목업([설계](../docs/human/explanation/architecture.md) 11절) |
-| `src/panels/mock.ts` | 운영 패널·전체 현황 목업: 데모 상태 기반 추천·이상 감지·전력 곡선, 건물별 브라우저 메모리 스케줄 저장소 |
+| `src/panels/mock.ts` | 운영 패널·전체 현황 목업: 데모 상태 기반 추천(층이 비어 있으면 건물 전체)·이상 감지·전력 곡선, 건물별 브라우저 메모리 스케줄 저장소 |
 | `src/BuildingEditor.tsx` | 평면도 편집: 방 이름, 벽 설치, 벽 삭제, 벽 이동, 칸막이, 실내기(`src/ingest/UnitTool.tsx`), 문(`src/ingest/DoorTool.tsx`), 위치 맞춤, 실행 취소 |
 | `src/ingest/PlanIngest.tsx` | 도면 업로드, 2D 실내기 매핑, 확정 저장 진입 컴포넌트(판매사 건물 화면에서 사용). 입력 IFC, DXF, DWG, PDF, PNG, JPG |
 | `src/ingest/api.ts` | 도면 변환 API(작업 생성, S3 업로드, 시작, 3초 상태 조회), 기호 인식, 확정 저장 어댑터 `saveTwin` |
