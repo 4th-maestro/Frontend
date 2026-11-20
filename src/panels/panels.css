@@ -107,7 +107,7 @@
 /* 지금 선은 칸 뒤(z-index 1), 시각 열의 표시만 보임: 칸 글자를 가리지 않음 */
 .tt-now { position: absolute; left: 0; right: 0; height: 0; border-top: 3px solid var(--ink); z-index: 1; pointer-events: none; }
 /* 지금 표시: 선과 분리해 칸보다 앞(z-index 4) */
-.tt-nowtag { position: absolute; z-index: 4; left: 4px; transform: translateY(-50%); padding: 2px 8px; border-radius: var(--r-full); background: var(--ink); color: var(--on-ink); font-size: 13px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tt-nowtag { position: absolute; z-index: 4; left: 4px; transform: translateY(-50%); padding: 2px 8px; border-radius: var(--r-full); background: var(--ink); color: var(--on-ink); font-size: 14px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tt-empty { position: absolute; left: 72px; right: 16px; top: 45%; margin: 0; text-align: center; font-size: 15px; color: var(--muted); }
 .tt-detail { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: var(--r-sm); }
 .tt-detail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 17px; }
