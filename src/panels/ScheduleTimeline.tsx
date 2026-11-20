@@ -54,6 +54,9 @@ export default function ScheduleTimeline({ building, floor, refreshKey, rooms = 
   const startH = Math.min(6, Math.floor(nowMin / 60), ...items.map((s) => Math.floor(minutes(s.time) / 60)))
   const y = (m: number) => ((m - startH * 60) / 60) * ROW
   const hours = Array.from({ length: 24 - startH + 1 }, (_, i) => startH + i)
+  // 지금 표시와 겹치는 시각 글자만 숨김(지금 표시가 정확한 시각을 대신 표시)
+  // - 범위(실측): 시각 글자는 줄 아래 5~27.5px, 지금 표시는 높이 25px(지금 선 위아래 12.5px), 여유 1px → 지금 선이 시각 줄 위 9px ~ 아래 41px
+  const nearNow = (h: number) => y(nowMin) > y(h * 60) - 9 && y(nowMin) < y(h * 60) + 41
   const sel = items.find((s) => s.id === picked) ?? items.find((s) => s.time > now) ?? items[0]
   const selIds = sel ? idsOf(sel) : []
 
@@ -92,7 +95,7 @@ export default function ScheduleTimeline({ building, floor, refreshKey, rooms = 
             <div className="tt-grid" style={{ height: y(24 * 60) + 96 }}>
               <div className="tt-past" style={{ height: Math.max(0, y(nowMin)) }} aria-hidden />
               {hours.map((h) => (
-                <div key={h} className="tt-hour" style={{ top: y(h * 60) }} aria-hidden><span>{String(h).padStart(2, '0')}시</span></div>
+                <div key={h} className="tt-hour" style={{ top: y(h * 60) }} aria-hidden>{!nearNow(h) && <span>{String(h).padStart(2, '0')}시</span>}</div>
               ))}
               <ol className="tt-lanes" style={{ '--n': Math.max(1, items.length) } as CSSProperties}>
                 {items.map((s, i) => {
