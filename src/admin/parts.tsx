@@ -113,10 +113,11 @@ export function Members({ base, members, onChange }: { base: string; members: Me
 
 // 변경 이력: 서버 순서(최신순) 50건, 동작·대상, 시각(한국 시각)·사용자
 // - at: 부모 데이터 객체. 바뀔 때마다 다시 조회(같은 화면에서 한 변경 반영)
-// - names: 대상 id → 표시 이름(기업 이름, 건물 이름, 구성원 이메일). 없으면 detail.email, 그다음 원래 값
+// - names: 대상 id → 표시 이름(기업 이름, 건물 이름, 구성원 이메일). 없으면 detail.email, detail.name, 그다음 원래 값
 const ACTION: Record<string, string> = {
   'company.create': '기업 생성', 'company.update': '기업 정보 수정', 'company.delete': '기업 삭제', 'company.code': '기업 코드 재발급',
-  'building.assign': '건물 연결', 'building.update': '건물 정보 수정', 'member.join': '구성원 가입', 'member.role': '역할 변경', 'member.remove': '구성원 제외',
+  'building.assign': '건물 연결', 'building.update': '건물 정보 수정', 'building.create': '건물 추가', 'building.plan': '도면 교체', 'building.delete': '건물 삭제',
+  'member.join': '구성원 가입', 'member.role': '역할 변경', 'member.remove': '구성원 제외',
 }
 // 기록 시각: 서버 정렬 키(시각#uuid) 형식도 허용
 const iso = (at: string) => at.split('#')[0]
@@ -131,7 +132,8 @@ export function Audit({ base, at, names }: { base: string; at: unknown; names: R
     return () => { alive = false }
   }, [base, at])
 
-  const target = (a: AuditItem) => names[a.target] ?? (typeof a.detail?.email === 'string' ? a.detail.email : a.target)
+  // 삭제된 건물은 목록에 없으므로 detail.name(building.delete) 사용
+  const target = (a: AuditItem) => names[a.target] ?? [a.detail?.email, a.detail?.name].find((v): v is string => typeof v === 'string') ?? a.target
   return (
     <section className="card adm-card" aria-labelledby="adm-log">
       <h2 id="adm-log">변경 이력</h2>

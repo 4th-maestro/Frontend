@@ -130,7 +130,8 @@ export const assignBuilding = (buildingId: string, companyId: string | null) =>
   call<{ buildingId: string; companyId: string | null }>(`/admin/buildings/${encodeURIComponent(buildingId)}/company`, json('PUT', { companyId }))
 export const listUsers = () => call<{ users: UserRow[] }>('/admin/users')
 
-// 판매사 건물 관리: 추가(id는 브라우저 생성 b-xxxxxxxx), 정보 수정, 도면 교체, 영구 삭제
+// 판매사 건물 관리: 추가(id는 브라우저 생성 b-xxxxxxxx), 정보 수정, 도면 교체·편집 저장, 영구 삭제
+// - 도면 저장 경로: PUT /buildings/{id}/twin(도면 변환 규약 docs/human/reference/plan-ingest.md 4절과 공용, 판매사 권한은 서버 판정)
 // - 도면 본문 한도 5MB(서버 413): 보내기 전에 확인
 const LIMIT = 5 * 1024 * 1024
 function upload(method: string, body: object): RequestInit {
@@ -142,7 +143,7 @@ export type TwinUpload = { twin: unknown; rooms: unknown[]; plan: unknown }
 const adminBuilding = (id: string) => `/admin/buildings/${encodeURIComponent(id)}`
 export const createBuilding = (companyId: string, body: Required<BuildingInput> & TwinUpload & { id: string }) =>
   call<{ building: CompanyBuilding }>(`${co(companyId)}/buildings`, upload('POST', body))
-export const putTwin = (id: string, body: TwinUpload) => call<{ building: CompanyBuilding }>(`${adminBuilding(id)}/twin`, upload('PUT', body))
+export const putTwin = (id: string, body: TwinUpload) => call<{ building: CompanyBuilding; version: number }>(`/buildings/${encodeURIComponent(id)}/twin`, upload('PUT', body))
 export const patchBuilding = (id: string, body: BuildingInput) => call<{ building: CompanyBuilding }>(adminBuilding(id), json('PATCH', body))
 export const deleteBuilding = (id: string) => call<{ deleted: boolean }>(adminBuilding(id), json('DELETE'))
 

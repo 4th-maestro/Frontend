@@ -12,8 +12,8 @@ import { BuildingForm, type BuildingInfo } from './parts'
 
 // 판매사 건물 화면(관리자 전용, #/admin/<기업 id>/buildings/...)
 // - new: 건물 추가 방법 선택 → image: 도면 이미지 파이프라인 → 건물 정보 확인 → POST
-// - replace: 도면 교체 방법 선택 → image: 파이프라인 → 교체 확인 → PUT .../twin
-// - plan: 서버 트윈 도면 편집(BuildingEditor) → PUT .../twin
+// - replace: 도면 교체 방법 선택 → image: 파이프라인 → 교체 확인 → PUT /buildings/{id}/twin
+// - plan: 서버 트윈 도면 편집(BuildingEditor) → PUT /buildings/{id}/twin
 const NO_TWIN = '트윈 도면이 없는 건물입니다. 도면 교체로 도면을 먼저 넣으십시오.'
 const NO_ROOMS = '실내기가 연결된 호실이 없어 저장할 수 없습니다. 도면을 보정한 뒤 다시 만드십시오.'
 
@@ -141,7 +141,7 @@ function ImageStep({ company, building, name, back }: { company: string; buildin
   )
 }
 
-// 도면 편집: 서버 트윈(GET /buildings/{id}/twin, 없으면 404 안내) → BuildingEditor → 변환 → PUT .../twin
+// 도면 편집: 서버 트윈(GET /buildings/{id}/twin, 없으면 404 안내) → BuildingEditor → 변환 → PUT /buildings/{id}/twin
 function EditPlan({ back, title, building }: { back: string; title: string; building: string }) {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [error, setError] = useState('')

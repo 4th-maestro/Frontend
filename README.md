@@ -22,7 +22,7 @@
 | `src/ai/ChartView.tsx` | AI 답변 그래프: 막대(한 색, 값 글자), 선(이번 기간 실선, 이전 기간 점선, 마우스·키보드 값 표시), 그래프·표 전환, 크게 보기 창(`<dialog>`) |
 | `src/ai/ChatPanel.tsx` | AI 운영 도우미(말풍선 대화, 처리 단계 접기, 초안 카드와 저장 안내, 근거 문서 목록(`sources`, http(s) 링크만, 새 탭), 대상 호실 3D 보기, 대화 지우기). 기록은 `GET /chat`, 실패 시 화면에만 기록 |
 | `src/twin3d/Twin3D.tsx` | Three.js 층 3D 트윈: 도면 API(`GET /buildings/{id}/plan`, 실패 시 `public/floorplans/<건물>.json`) 호실 다각형, 지표 색, HVAC 운전·이상 표시, 호실 선택, 시점 초기화·위에서 보기 |
-| `src/api.ts` | Lambda API 호출(모든 조회에 `building` 전달), 실패하면 목업으로 대체하고 화면에 목업 표시. `GET /me`, `POST /me/join`, 기업 정보 조회 API(`GET /company`, `GET /company/audit`), 트윈 조회(`GET /buildings/{id}/twin`), 판매사 관리 API(`/admin/companies`, `/admin/buildings`, `/admin/users`, 건물 추가 `POST /admin/companies/{id}/buildings`, 정보 수정 `PATCH /admin/buildings/{id}`, 도면 교체 `PUT /admin/buildings/{id}/twin`, 삭제 `DELETE /admin/buildings/{id}`)는 목업 대체 없이 오류 표시. 도면 본문이 5MB를 넘으면 보내기 전에 안내. 403 `COMPANY_SUSPENDED`는 서비스 중지 화면 전환 이벤트(`SUSPENDED`) 발생 |
+| `src/api.ts` | Lambda API 호출(모든 조회에 `building` 전달), 실패하면 목업으로 대체하고 화면에 목업 표시. `GET /me`, `POST /me/join`, 기업 정보 조회 API(`GET /company`, `GET /company/audit`), 트윈 조회(`GET /buildings/{id}/twin`), 판매사 관리 API(`/admin/companies`, `/admin/buildings`, `/admin/users`, 건물 추가 `POST /admin/companies/{id}/buildings`, 정보 수정 `PATCH /admin/buildings/{id}`, 삭제 `DELETE /admin/buildings/{id}`), 도면 교체·편집 저장(`PUT /buildings/{id}/twin`, 판매사 권한은 서버 판정)는 목업 대체 없이 오류 표시. 도면 본문이 5MB를 넘으면 보내기 전에 안내. 403 `COMPANY_SUSPENDED`는 서비스 중지 화면 전환 이벤트(`SUSPENDED`) 발생 |
 | `src/ai/useAsk.ts` | AI 질의 훅. `buildingId` 전송, WebSocket 단계 이벤트 수신, 연결 실패 시 `api.ts` 질의로 대체, 45초 제한 |
 | `src/ai/ThinkingPanel.tsx` | AI 사고 과정 패널(단계, 조건 칩, 스트리밍 답변)과 진행 표시 `ThinkingBadge` |
 | `src/mock.ts` | 목업: 건물별 데모 상태, 정규식 기반 질의 해석 |
@@ -42,8 +42,8 @@
 | `#/admin` | 판매사 기업 관리: 기업 목록, 기업 추가, 가입한 사용자(관리자 그룹 전용) |
 | `#/admin/<기업 id>` | 기업 상세: 기업 코드, 기업 정보·사용 상태, 건물(추가, 정보 수정, 도면 편집·교체, 연결·해제, 영구 삭제), 구성원 역할 변경·제외, 변경 이력, 삭제 |
 | `#/admin/<기업 id>/buildings/new` | 건물 추가: 만들기 방법 선택. `/image`를 붙이면 도면 이미지 단계(트윈 파이프라인 → 건물 정보 확인 → 저장 후 기업 상세) |
-| `#/admin/<기업 id>/buildings/<건물 id>/replace` | 도면 교체: 같은 방법 선택 화면. `/image`는 도면 이미지 단계(교체 확인 후 `PUT .../twin`) |
-| `#/admin/<기업 id>/buildings/<건물 id>/plan` | 도면 편집: 서버 트윈 도면을 편집기로 수정 후 저장. 트윈 도면이 없으면(404) 도면 교체 안내 |
+| `#/admin/<기업 id>/buildings/<건물 id>/replace` | 도면 교체: 같은 방법 선택 화면. `/image`는 도면 이미지 단계(교체 확인 후 `PUT /buildings/{id}/twin`) |
+| `#/admin/<기업 id>/buildings/<건물 id>/plan` | 도면 편집: 서버 트윈 도면을 편집기로 수정 후 저장(`PUT /buildings/{id}/twin`). 트윈 도면이 없으면(404) 도면 교체 안내 |
 | `#/settings` | 고객사 기업 정보(조회 전용): 기본 정보, 건물, 변경 이력(고객사 구성원 전용, 사이드바 기업 이름 아래 메뉴) |
 
 주: 건물 id는 `main`(본관, 공개 IFC), `office`, `edu`, `lab`(가상 건물)과 판매사가 추가한 `b-xxxxxxxx`입니다. 목록에 없는 id는 안내 문구를 표시합니다.
