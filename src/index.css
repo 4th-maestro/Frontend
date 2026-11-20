@@ -62,6 +62,12 @@ h3 { font-size: 17px; font-weight: 600; margin: 0 0 8px; }
 .kval small { font-size: 17px; font-weight: 500; margin-left: 2px; }
 .kval.bad { color: var(--danger); }
 .ksub { font-size: 14px; color: var(--muted); }
+/* 묶음 지표 카드(4열 중 2열): 운영 상태 4칸, 전력·요금 3칸. 좁은 화면은 칸이 줄바꿈 */
+.kpi.wide { grid-column: span 2; display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 12px 16px; }
+@media (max-width: 743px) { .kpi.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kitem { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* 전력 추이: 지표 카드 아래 전체 너비 */
+.trend-wide { margin-bottom: 24px; }
 .suggest { list-style: none; margin: 0; padding: 0; }
 .suggest button { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border: 0; border-radius: var(--r-sm); background: none; text-align: left; font-size: 16px; }
 .suggest button:hover { background: var(--surface-soft); }
@@ -84,6 +90,8 @@ h3 { font-size: 17px; font-weight: 600; margin: 0 0 8px; }
 .tw-tools .pill { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; white-space: nowrap; }
 .sim-none { display: flex; align-items: center; justify-content: center; margin: 0; padding: 24px; text-align: center; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+.legend-units { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.legend .sym-icon { width: 20px; height: 20px; vertical-align: middle; margin-right: 4px; }
 .sw { display: inline-block; width: 22px; height: 12px; border-radius: 2px; margin-right: 2px; vertical-align: -1px; }
 .sw.bad { background: #fdecec; outline: 2px solid var(--danger); margin-right: 6px; }
 
