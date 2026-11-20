@@ -188,7 +188,10 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   }, [building, ops, reloadKey])
   const load = () => setReloadKey((k) => k + 1)
   useEffect(() => onRoomSelected(setSelected), [])
-  useEffect(() => onNeedBuilding(() => frame.current, getTwin), [])
+  // 트윈 데이터가 없는 건물(트윈 조회 404 등): 트윈 화면 대신 내장 3D 도면, 트윈 연동 패널 숨김
+  const [twinless, setTwinless] = useState(false)
+  const twinOn = Boolean(TWIN_URL) && !twinless
+  useEffect(() => onNeedBuilding(() => frame.current, (id) => getTwin(id).catch((e: unknown) => { setTwinless(true); throw e })), [])
   useEffect(() => onTwinControl((room, sp) => { setRoomSetpoint(building, room, sp); load() }), [building])
 
   // 대화 기록: 서버(로그인 사용자·건물별), 실패하면 이 화면에만 기록
@@ -210,7 +213,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   // 선택된 층이 현재 건물의 층 목록에서 사라지면 건물 보기로 돌아감
   if (status && floor && !floors.includes(floor)) setFloor('')
   // 트윈 화면이 없으면 빈 층(새로고침 직후 빈 도면) 대신 첫 층 표시
-  if (!TWIN_URL && !floor && floors.length) setFloor(floors[0])
+  if (!twinOn && !floor && floors.length) setFloor(floors[0])
   // 새 AI 결과: 대화에 추가, 이전 초안 닫기, 대상 호실 강조, 초안 대상 층으로 이동
   if (ai.result !== seen) {
     setSeen(ai.result)
@@ -342,7 +345,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
                       ))}
                     </div>
                   </div>
-                  {TWIN_URL ? (
+                  {twinOn ? (
                     <iframe ref={frame} className="embed" src={src} title="3D 디지털트윈" onLoad={() => { postTheme(frame.current); postState(frame.current, building, floor, mode, rooms, highlight, twinData) }} />
                   ) : floor ? (
                     <Suspense fallback={<div className="embed"><SkPlan /></div>}>
@@ -359,7 +362,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
 
               <aside className="rail">
                 {/* 3D 트윈 안에 있던 운전 시뮬레이션: 임베딩 화면이 작아서 3D 도면 바로 옆 패널로 */}
-                {TWIN_URL && <SimPanel frame={() => frame.current} onLocate={locate} />}
+                {twinOn && <SimPanel frame={() => frame.current} onLocate={locate} />}
                 {import.meta.env.DEV && building === 'eng6' && <ExperimentPanel />}
                 <ChatPanel
                   ai={ai} messages={messages} rooms={rooms} suggestions={suggestions} busy={busy} history={history}
