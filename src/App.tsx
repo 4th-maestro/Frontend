@@ -27,7 +27,8 @@ import { usePoll } from './panels/usePoll'
 import Portfolio from './portfolio/Portfolio'
 import { FloorList, Layout } from './shell/Shell'
 import { href, parseRoute, type FloorSummary, type Tab } from './shell/route'
-import { TWIN_URL, onNeedBuilding, onTwinReady, onTwinControl, onTwinReport, onRoomSelected, onTwinChange, postState, postTheme, postUi, twinSrc, type TwinBuilding, type TwinData, type TwinKpi, type TwinReport } from './twin'
+import { TWIN_URL, onNeedBuilding, onTwinReady, onTwinControl, onTwinReport, onTwinSimAnswer, onRoomSelected, onTwinChange, postState, postTheme, postUi, sendTwin, twinSrc, type TwinBuilding, type TwinData, type TwinKpi, type TwinReport } from './twin'
+import { answerText, draftOf, parseWhatIf, pendingText, type WhatIf } from './whatif'
 import type { BuildingCard, Draft, Mode, Room, Status } from './types'
 import { Sk, SkFloors, SkKpis, SkPlan } from './skeleton/Skeleton'
 import CountUp from './motion/CountUp'
@@ -226,6 +227,16 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
     if (sim && flowOn) postUi(frame.current, 'flow:off')
     if (sim && pipesOn) postUi(frame.current, 'pipes')
   }, [sim, ops, persona, flowOn, pipesOn])
+  // 채팅 what-if: 트윈이 EnergyPlus로 계산한 결과를 '계산 중' 메시지 자리에 답변 + 설정온도 초안으로 바꿔 넣음
+  const whatIfs = useRef(new Map<string, WhatIf>())
+  useEffect(() => onTwinSimAnswer((a) => {
+    const w = whatIfs.current.get(a.id)
+    if (!w) return
+    whatIfs.current.delete(a.id)
+    setMessages((ms) => ms.map((m) => (m.id !== a.id ? m : a.ok && a.window
+      ? { ...m, text: answerText(w, a), draft: draftOf(w, a), draftState: 'pending' as const }
+      : { ...m, text: answerText(w, a) })))
+  }), [])
 
   // 대화 기록: 서버(로그인 사용자·건물별), 실패하면 이 화면에만 기록
   useEffect(() => {
@@ -348,6 +359,18 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   function send(q: string) {
     setError('')
     setMessages((ms) => [...ms, { id: uid(), fresh: true, role: 'user', text: q }])
+    // "3층 강의실 18도로 낮추면?" 같은 what-if는 3D 트윈의 EnergyPlus 계산으로 답함 (서버 AI에는 아직 이 도구가 없음)
+    const w = TWIN_URL ? parseWhatIf(q, all, uid) : null
+    if (w && w.roomIds.length) {
+      reset(); setSeen(null)
+      whatIfs.current.set(w.id, w)
+      setMessages((ms) => [...ms.map((m) => (m.draftState === 'pending' ? { ...m, draftState: 'closed' as const } : m)),
+        { id: w.id, fresh: true, role: 'assistant', text: pendingText(w), highlight: w.roomIds }])
+      setFocus(w.roomIds)
+      if (w.floor !== 'all' && floors.includes(w.floor)) setFloor(w.floor)
+      sendTwin(frame.current, { type: 'simAsk', id: w.id, rooms: w.roomIds, setpoint: w.setpoint, hours: w.hours })
+      return
+    }
     ask(q)
   }
 

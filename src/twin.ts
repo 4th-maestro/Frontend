@@ -171,6 +171,16 @@ export function onTwinSim(handler: (s: SimState) => void) {
   window.addEventListener('message', listener)
   return () => window.removeEventListener('message', listener)
 }
+// 채팅 what-if 결과 (트윈이 EnergyPlus로 계산): window = 계산 구간·절감·대상 호실 평균 실온
+export type SimAnswer = { id: string; ok: boolean; error?: string; mode?: SimMode; window?: SimWindow; calibration?: number; engine?: string; seconds?: number | null }
+export function onTwinSimAnswer(handler: (a: SimAnswer) => void) {
+  const listener = (e: MessageEvent) => {
+    if (!TWIN_URL || e.origin !== twinOrigin() || e.data?.source !== 'twin' || e.data.type !== 'simAnswer') return
+    handler(e.data as SimAnswer)
+  }
+  window.addEventListener('message', listener)
+  return () => window.removeEventListener('message', listener)
+}
 export function sendTwin(frame: HTMLIFrameElement | null, msg: Record<string, unknown>) {
   if (TWIN_URL) frame?.contentWindow?.postMessage({ source: 'maestro', ...msg }, twinOrigin())
 }

@@ -171,13 +171,13 @@ function windowKpi(b, s, L, w){
   const r = v => Math.round(v * 1000) / 1000, part = h => Math.max(0, Math.min(h + 1, w.to) - Math.max(h, w.from));
   const sum = (a, f = part) => a.reduce((t, v, h) => t + v * f(h), 0);
   const temps = R => { let t = 0, n = 0, mx = null;
-    for (const [id, x] of Object.entries(R.rooms)) { if (!x.hourlyT) continue;
+    for (const [id, x] of Object.entries(R.rooms)) { if (!x.hourlyT || (w.rooms && !w.rooms.includes(id))) continue;
       for (let h = Math.floor(w.from); h < Math.ceil(w.to); h++) { const T = x.hourlyT[h], p = part(h); if (T == null || !p || !L.rooms[id]?.avail[h]) continue; t += T * p; n += p; mx = Math.max(mx ?? T, T); } }
     return { avgT:n ? r(t / n) : null, maxT:mx }; };
   const side = R => ({ kwh:r(sum(R.hourlyKwh)), won:Math.round(sum(R.hourlyWon)), ...temps(R) });
   const B = side(b), S = side(s), after = h => h >= Math.ceil(w.to) ? 1 : 0;
   const hhmm = h => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
-  return { from:w.from, to:w.to, hours:w.hours, label:`${hhmm(w.from)}~${hhmm(w.to)}`, clipped:w.to - w.from < w.hours, setpoint:w.sp, base:B, scenario:S,
+  return { from:w.from, to:w.to, hours:w.hours, rooms:w.rooms || null, label:`${hhmm(w.from)}~${hhmm(w.to)}`, clipped:w.to - w.from < w.hours, setpoint:w.sp, base:B, scenario:S,
     savedKwh:r(B.kwh - S.kwh), savedWon:B.won - S.won, savedPct:B.kwh >= .5 ? r((B.kwh - S.kwh) / B.kwh * 100) : null,   // 기준이 거의 0이면 % 무의미
     afterSavedKwh:r(sum(b.hourlyKwh, after) - sum(s.hourlyKwh, after)) };
 }
@@ -193,11 +193,13 @@ export async function compare(dataDir, scenario, opts = {}){
   // '지금부터 N시간': 기준 = 현재 설정을 그대로 유지했을 때의 예측(오늘 실제 운전 + 이후 재실 예상), 선택 = 같은 운전에서 그 구간만 설정온도 변경
   //   구간은 15분 단위(EnergyPlus Timestep 4), 오늘 24시를 넘기면 24시까지만
   const win = L && scenario?.window ? (() => { const n = Math.min(12, Math.max(.25, +scenario.window.hours || 2)), from = Math.floor(L.now * 4) / 4;
-    return { from, to:Math.min(24, from + Math.round(n * 4) / 4), hours:n, sp:Math.min(30, Math.max(18, +scenario.coolSetpoint || base.coolSetpoint)) }; })() : null;
-  const sc = win ? { ...JSON.parse(JSON.stringify(base)), name:`지금부터 ${win.hours}시간 ${mode === 'heat' ? '난방' : '냉방'} ${win.sp}°C`, inherit:'live', coolSetpoint:win.sp, window:{ from:win.from, to:win.to, hours:win.hours } }
+    // window.rooms: 이 방들만 바꿈 (채팅 what-if "3층 강의실 18도로 낮추면?"), 없으면 건물 전체
+    const only = Array.isArray(scenario.window.rooms) ? scenario.window.rooms.filter(id => L.rooms[id]) : [];
+    return { from, to:Math.min(24, from + Math.round(n * 4) / 4), hours:n, sp:Math.min(30, Math.max(18, +scenario.coolSetpoint || base.coolSetpoint)), rooms:only.length ? only : null }; })() : null;
+  const sc = win ? { ...JSON.parse(JSON.stringify(base)), name:`지금부터 ${win.hours}시간 ${mode === 'heat' ? '난방' : '냉방'} ${win.sp}°C`, inherit:'live', coolSetpoint:win.sp, window:{ from:win.from, to:win.to, hours:win.hours, ...(win.rooms ? { rooms:win.rooms } : {}) } }
     : cleanScenario(scenario, B, base);
   if (win) { base.name = '현재 설정 유지 (예측)';
-    for (const id of Object.keys(L.rooms)) sc.rooms[id] = { ...sc.rooms[id], spWindow:{ from:win.from, to:win.to, sp:win.sp, base:sc.rooms[id]?.coolSetpoint ?? base.coolSetpoint } }; }
+    for (const id of win.rooms || Object.keys(L.rooms)) sc.rooms[id] = { ...sc.rooms[id], spWindow:{ from:win.from, to:win.to, sp:win.sp, base:sc.rooms[id]?.coolSetpoint ?? base.coolSetpoint } }; }
   // 오늘 실측 기준에서 건물 전체 조건을 바꿀 땐: 방마다 오늘 실제로 켠 시간은 그대로 두고
   //   운전 시간대 밖은 끄고, '사람 적은 시간 끄기'면 실측·예상 재실 0명인 시간을 끄고, 사전 냉방이면 사람 오기 전 시간을 켬
   if (L && sc.inherit !== 'live' && !win) {

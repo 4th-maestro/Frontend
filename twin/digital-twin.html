@@ -2443,6 +2443,17 @@ async function simRun(){
   } catch (e) { SIM.msg = '오류: ' + (e.message || e); }
   SIM.busy = false; SIM.ver++; renderSim(true); $('#kpis').innerHTML = ''; renderKpis(); if (state.view === 'room') renderInspector();
 }
+// 채팅 what-if: 대시보드 AI 도우미가 "3층 강의실 18도로 낮추면?"을 보내면 그 방들만 지금부터 N시간 설정을 바꿔 EnergyPlus로 계산하고 결과만 돌려줌
+//   시뮬레이션 패널의 결과(SIM.result)는 건드리지 않음
+async function simAsk(m){
+  const ids = (m.rooms || []).filter(id => ROOM[id]);
+  try {
+    if (!ids.length) throw new Error('3D 트윈에 없는 호실이에요');
+    if (!hasLive()) throw new Error('오늘 실측 기록이 아직 없어요. 잠시 뒤 다시 물어 주세요');
+    const j = await simCompare({ name:'AI what-if', coolSetpoint:+m.setpoint, window:{ hours:+m.hours || 2, rooms:ids } }, true);
+    emit('simAnswer', { source:'twin', id:m.id, ok:true, mode:j.mode || 'cool', window:j.window, calibration:j.calibration?.factor ?? 1, engine:j.scenario.engine, seconds:j.scenario.run?.seconds ?? null });
+  } catch (e) { emit('simAnswer', { source:'twin', id:m.id, ok:false, error:e.message || String(e) }); }
+}
 // 대시보드의 '운전 시뮬레이션' 패널로 보내는 상태 (트윈 안 패널은 작아서 대시보드 쪽에 그림)
 function simReport(force){
   if (!HOST.on || !hostReady()) return;
@@ -3003,6 +3014,7 @@ window.addEventListener('message', e => {
   else if (m.type === 'twin:persona') API.setPersona(m.persona);
   else if (m.source === 'maestro' && m.type === 'state') syncHost(m);
   else if (m.source === 'maestro' && m.type === 'simRun' && !SIM.busy) { Object.assign(simForm(), m.form || {}); simRun(); }
+  else if (m.source === 'maestro' && m.type === 'simAsk') simAsk(m);
   else if (m.source === 'maestro' && m.type === 'simRoom' && ROOM[m.room]) goRoom(ROOM[m.room]);
   else if (m.source === 'maestro' && m.type === 'ui' && typeof m.action === 'string') hostUi(m.action);
 });

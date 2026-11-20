@@ -287,6 +287,10 @@ DigitalTwin.ingest(snapshot);
   - 대시보드의 호실 id·실내기 id는 트윈 `building.json`의 id 그대로입니다. 데모 값도 트윈 도면에서 만듭니다(`node tools/export-web-demo.mjs` → 웹 `public/demo/`, 생성 코드는 `pipeline/web-demo.js`).
   - 건물 목록도 트윈을 따릅니다: `data/buildings.json`(6공학관 `eng6`, 부산역 역사 `busan-station`). 대시보드가 `?building=<id>`로 열면 그 건물 폴더를 읽습니다.
   - 대시보드의 **건물 추가하기**: 도면 이미지를 넣고 파이프라인에서 **트윈에서 렌더링**을 누르면 그때부터 그 건물 데이터가 만들어집니다. 그 전에는 만들지 않습니다.
+  - **채팅 what-if**: AI 도우미에 "3층 강의실 18도로 낮추면?"처럼 물으면 대시보드가 `{source:'maestro', type:'simAsk', id, rooms, setpoint, hours}`를 보냅니다.
+    - 트윈은 그 방들만 지금부터 N시간(기본 2시간) 설정을 바꿔 EnergyPlus로 계산합니다. 기준은 현재 설정 유지 예측이고, 서버에는 `scenario.window.rooms`로 전달됩니다.
+    - 결과는 `{source:'twin', type:'simAnswer', id, ok, mode, window}`로 돌려줍니다. 대시보드는 답변과 설정온도 스케줄 초안을 대화에 넣습니다.
+    - 시뮬레이션 패널의 결과는 바꾸지 않습니다.
 - 대시보드 없이 혼자 열면 받은 값이 없으므로 도면만 보입니다. `postMessage`·`DigitalTwin.ingest`로 넣으면 그때부터 그립니다.
 
 ### 스냅샷 형식 (twin.realtime/v1)
