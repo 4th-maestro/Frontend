@@ -133,8 +133,7 @@ function Assistant({ m, rooms, busy, onSave, onClose, onFocus, onSelect, onExpan
   const byId = new Map(rooms.map((r) => [r.id, r]))
   const targets = (m.highlight ?? []).map((id) => byId.get(id)).filter((r): r is Room => !!r)
   const d = m.draft
-  // 서버 값이라 http(s) 주소만 링크로 표시
-  const sources = (m.sources ?? []).filter((s) => /^https?:\/\//i.test(s.url))
+  const sources = m.sources ?? []
   return (
     <div className={`msg ai${m.note ? ' note' : ''}${m.fresh ? ' rise-in' : ''}`}>
       {m.mock && <span className="tag">목업 응답</span>}
@@ -152,10 +151,13 @@ function Assistant({ m, rooms, busy, onSave, onClose, onFocus, onSelect, onExpan
           <ul>
             {sources.map((s, i) => (
               <li key={i}>
-                <a href={s.url} target="_blank" rel="noopener noreferrer">
-                  <span>{s.title}{s.date ? `(${s.date})` : ''}</span>
-                  <ExternalLink size={16} aria-hidden />
-                </a>
+                {/* 서버 값이라 http(s) 주소만 링크, 그 외는 문서명만 표시 */}
+                {/^https?:\/\//i.test(s.url) ? (
+                  <a href={s.url} target="_blank" rel="noopener noreferrer">
+                    <span>{s.title}{s.date ? `(${s.date})` : ''}</span>
+                    <ExternalLink size={16} aria-hidden />
+                  </a>
+                ) : <span className="src-title">{s.title}{s.date ? `(${s.date})` : ''}</span>}
                 {s.checked && <p>원문 확인일 {s.checked}</p>}
               </li>
             ))}
