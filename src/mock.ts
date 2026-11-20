@@ -59,7 +59,7 @@ export function summarize(rooms: Room[]) {
   }
 }
 
-const USES: [RegExp, string][] = [[/회의/, '회의실'], [/사무/, '사무실'], [/강의/, '강의실'], [/연구/, '연구실'], [/실험/, '실험실'], [/휴게|대기/, '대기·휴게']]
+const USES: [RegExp, string][] = [[/회의/, '회의실'], [/사무/, '사무실'], [/진료/, '진료실'], [/강의/, '강의실'], [/연구/, '연구실'], [/실험/, '실험실'], [/휴게|대기/, '대기·휴게']]
 const METRICS: [RegExp, keyof Room, string, string][] = [
   [/습도/, 'humidity', '습도', '%'], [/온도/, 'temp', '실내온도', '℃'], [/./, 'powerKw', '전력', 'kW'],
 ]
@@ -84,6 +84,7 @@ export async function mockAsk(text: string, building: string): Promise<QueryResu
     return {
       answer: `${where} 중 ${label} ${asc ? '하위' : '상위'} ${top.length}곳은 ${list}입니다.${idle ? ` 이 중 ${idle}곳은 재실 없이 운전 중이므로 OFF 스케줄을 검토하십시오.` : ''}`,
       highlight: top.map((r) => r.id), draft: null, mock: true,
+      charts: [{ kind: 'bar', title: `${where} ${label} ${asc ? '낮은' : '높은'} 순 ${top.length}곳`, unit, items: top.map((r) => ({ id: r.id, label: r.name, sub: `${r.floor}, ${r.use}`, value: r[key] as number })) }],
     }
   }
 

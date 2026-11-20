@@ -176,7 +176,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
     const r = ai.result
     if (r) {
       setMessages((ms) => [...ms.map((m) => (m.draftState === 'pending' ? { ...m, draftState: 'closed' as const } : m)),
-        { id: uid(), fresh: true, role: 'assistant', text: r.answer, steps: r.steps, highlight: r.highlight, draft: r.draft, draftState: r.draft ? 'pending' : undefined, mock: r.mock }])
+        { id: uid(), fresh: true, role: 'assistant', text: r.answer, steps: r.steps, highlight: r.highlight, draft: r.draft, draftState: r.draft ? 'pending' : undefined, mock: r.mock, charts: r.charts }])
       setFocus(r.highlight.length ? r.highlight : NO_IDS)
       if (r.draft && floors.includes(r.draft.floor)) setFloor(r.draft.floor)
     }
@@ -205,10 +205,10 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
     { icon: Droplets, text: `${floor ? floor.replace('F', '층') : '건물 전체'}에서 습도가 높은 공간 5곳 알려줘` },
   ]
 
-  // 패널의 위치 버튼: 3D에서 선택하고 3D 영역을 화면 안으로 이동
+  // 패널의 위치 버튼: 3D에서 선택하고 3D 영역을 화면 안으로 이동, 다른 층 호실이면 그 층으로 전환
   function locate(id: string) {
-    const target = all.find((r) => r.id === id)
-    if (target) setFloor(target.floor)
+    const r = all.find((x) => x.id === id)
+    if (r && r.floor !== floor) setFloor(r.floor)
     setSelected(id)
     document.querySelector('.twin')?.scrollIntoView({ block: 'nearest' })
   }
@@ -217,7 +217,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   function showDraft(d: Draft) {
     reset(); setSeen(null)
     setMessages((ms) => [...ms.map((m) => (m.draftState === 'pending' ? { ...m, draftState: 'closed' as const } : m)),
-      { id: uid(), fresh: true, role: 'assistant', text: `최적 제어 추천에서 만든 초안입니다. ${d.roomNames[0]}${d.roomIds.length > 1 ? ` 외 ${d.roomIds.length - 1}곳` : ''}이 대상입니다. 확인 후 저장하십시오.`, draft: d, draftState: 'pending', highlight: d.roomIds }])
+      { id: uid(), fresh: true, role: 'assistant', text: `최적 제어 추천에서 만든 초안입니다. ${d.roomNames[0]}${d.roomIds.length > 1 ? ` 외 ${d.roomIds.length - 1}곳` : ''}이 대상입니다.`, draft: d, draftState: 'pending', highlight: d.roomIds }])
     setFocus(d.roomIds)
   }
 
@@ -312,7 +312,8 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
                   {room ? <RoomDetail r={room} /> : <p className="muted pick-hint">{floor ? '호실을 누르면 HVAC 상태가 여기에 표시됩니다.' : '층을 선택하면 평면도가 표시됩니다.'}</p>}
                 </section>
                 {floor && <PowerTrend building={building} floor={floor} />}
-                <ScheduleTimeline building={building} refreshKey={scheduleKey} rooms={all} onLocate={locate} />
+                {/* 트윈 건물은 층이 비어 있을 수 있음: 빈 층이면 시간표는 전체 층 보기(2026-11-20 결정) */}
+                <ScheduleTimeline building={building} floor={floor || 'all'} floors={floors} refreshKey={scheduleKey} rooms={all} onLocate={locate} />
               </div>
 
               <aside className="rail">

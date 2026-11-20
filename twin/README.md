@@ -52,6 +52,12 @@ node tools/sim-server.mjs 8766
 - 가구는 그리지 않습니다.
 - 명령줄로 실행하려면 `node tools/run-pipeline.mjs source/eng6/recipe.json data/building.json`을 씁니다. 그다음 `node tools/make-virtual-data.mjs`로 가상 데이터를 다시 만듭니다.
 
+**원본 이미지 보관**
+
+- `source/*/photos/`, `source/*/plans/`의 사진·안내도와 `data/**/skyview.png`는 저장소에 포함하지 않습니다(2026-11-20 결정). 출처와 사용 조건을 확인하지 못했습니다.
+- 레시피를 다시 실행하려면 원본 이미지를 같은 경로에 넣으십시오. 원본은 PR #11의 첫 커밋(`7401f98`)에 있습니다. 예: `git show 7401f98:twin/source/eng6/photos/interior-1.jpg > twin/source/eng6/photos/interior-1.jpg`
+- 이미지 출처(직접 촬영, 기관 게시물 등)와 사용 조건은 작성자 확인 후 이 절에 기록하십시오.
+
 **제6공학관 예시** (`source/eng6/`)
 
 - 2·3층: 피난안내도 사진에서 자동으로 검출했습니다. 사람이 보정한 것은 스티커에 가린 벽 3~4줄뿐입니다.
