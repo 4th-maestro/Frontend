@@ -14,6 +14,11 @@
 const r3 = v => Math.round(v * 1000) / 1000;
 const area = p => { let s = 0; for (let i = 0; i < p.length; i++) { const [x0, y0] = p[i], [x1, y1] = p[(i + 1) % p.length]; s += x0 * y1 - x1 * y0; } return s / 2; };   // 부호 있음
 const inPoly = (x, y, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+// 층 윤곽: 다각형 하나 또는 여러 개(떨어진 동). 없으면 W×D 사각형
+export const footLoops = (fp, W, D) => !fp?.length ? [[[0, 0], [W, 0], [W, D], [0, D]]] : Array.isArray(fp[0]?.[0]) ? fp.filter(l => l?.length >= 3) : [fp];
+export const inFootprint = (x, y, fp, W, D) => footLoops(fp, W, D).some(l => inPoly(x, y, l));
+// 위층이 이 점을 덮는지: 지붕 정원·데크(open)는 외기에 열려 있어 덮지 않음
+export const coveredBy = (above, x, y, W, D) => !!above && !above.open && inFootprint(x, y, above.footprint, W, D);
 
 // 용도별 가정값 (사람이 바꿀 수 있게 밖으로 뺌)
 export const EP_USE = {
@@ -136,12 +141,13 @@ export function toIdf(B, { weatherFile = false, site = BUSAN, cooling = 26, heat
   //   난방 능력: heatKw가 없으면 냉방 능력 × 1.1 (시스템 에어컨 실내기 냉·난방 능력 비 근사)
   const kw = {}, hkw = {}, inKw = {}; for (const a of B.idus || []) { kw[a.room] = (kw[a.room] || 0) + (a.coolKw || 0); hkw[a.room] = (hkw[a.room] || 0) + (a.heatKw || (a.coolKw || 0) * 1.1); inKw[a.room] = (inKw[a.room] || 0) + (a.ratedKw || 0); }
 
+  // 지하층(id 'B1'·'B2'… 또는 below:true): 지면(z=0) 아래로 내려 쌓고, 외벽은 흙에 닿음(Ground, 창·일사·바람 없음)
+  const below = f => f.below === true || /^B\d+F?$/i.test(f.id), NB = B.floors.filter(below).length;
   B.floors.forEach((f, li) => {
-    const z0 = li * FH, z1 = z0 + FH, above = B.floors[li + 1];
-    const foot = f.footprint?.length >= 3 ? f.footprint : [[0, 0], [W, 0], [W, D], [0, D]];
-    const covered = (x, y) => above && (above.footprint?.length >= 3 ? inPoly(x, y, above.footprint) : true);
+    const z0 = (li - NB) * FH, z1 = z0 + FH, above = B.floors[li + 1], under = below(f);
+    const covered = (x, y) => coveredBy(above, x, y, W, D);
     const ext = (p, q) => { const len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, nx = -(q[1] - p[1]) / len * .4, ny = (q[0] - p[0]) / len * .4, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
-      return !inPoly(mx + nx, my + ny, foot) || !inPoly(mx - nx, my - ny, foot); };
+      return !inFootprint(mx + nx, my + ny, f.footprint, W, D) || !inFootprint(mx - nx, my - ny, f.footprint, W, D); };
     f.rooms.filter(r => r.type === 'room').forEach((r, ri) => {
       const zn = `Z${f.id}_${String(ri + 1).padStart(3, '0')}`;
       if (experiment && !experiment.rooms.has(r.id)) return;
@@ -157,7 +163,7 @@ export function toIdf(B, { weatherFile = false, site = BUSAN, cooling = 26, heat
       const xs = r.polygon.map(p => p[0]), ys = r.polygon.map(p => p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
       // 바닥(아래를 향함 = 위에서 볼 때 시계 방향), 천장·지붕(반시계)
       out.push(obj('BuildingSurface:Detailed', [`${zn} Floor`, 'Floor', 'Slab', zn, '', li === 0 ? 'Ground' : 'Adiabatic', '', 'NoSun', 'NoWind', '0', poly.length, ...V([...poly].reverse().map(([x, y]) => [x, y, z0]))]));
-      const roof = !covered(cx, cy);
+      const roof = !under && !covered(cx, cy);      // 지하층 위가 비어 있어도 흙·광장 아래라 지붕으로 보지 않음
       out.push(obj('BuildingSurface:Detailed', [`${zn} Top`, roof ? 'Roof' : 'Ceiling', roof ? 'Roof' : 'Slab', zn, '', roof ? 'Outdoors' : 'Adiabatic', '', roof ? 'SunExposed' : 'NoSun', roof ? 'WindExposed' : 'NoWind', roof ? '0' : '0', poly.length, ...V(poly.map(([x, y]) => [x, y, z1]))]));
       // 외벽 + 창 (안쪽 벽은 단열로 보고 생략)
       const src = area(r.polygon.map(P)) < 0 ? [...r.polygon].reverse() : r.polygon;       // poly와 같은 순서의 원래 좌표
@@ -169,6 +175,7 @@ export function toIdf(B, { weatherFile = false, site = BUSAN, cooling = 26, heat
         const len = Math.hypot(q[0] - p[0], q[1] - p[1]); if (len < .3) return;
         const wn = `${zn} W${i + 1}`;
         if (!ext(a, b)) { intWall(p, q, wn); return; }    // 다른 실과 맞닿은 벽: 단열 경계(열은 안 넘기지만 실 안 복사·축열엔 참여)
+        if (under) { out.push(obj('BuildingSurface:Detailed', [wn, 'Wall', 'ExtWall', zn, '', 'Ground', '', 'NoSun', 'NoWind', '0', 4, ...V([[p[0], p[1], z1], [p[0], p[1], z0], [q[0], q[1], z0], [q[0], q[1], z1]])])); return; }
         out.push(obj('BuildingSurface:Detailed', [wn, 'Wall', 'ExtWall', zn, '', 'Outdoors', '', 'SunExposed', 'WindExposed', 'AutoCalculate', 4, ...V([[p[0], p[1], z1], [p[0], p[1], z0], [q[0], q[1], z0], [q[0], q[1], z1]])]));
         if (len < 1.2) return;
         const ux = (q[0] - p[0]) / len, uy = (q[1] - p[1]) / len, i0 = .3, i1 = len - .3, A = [p[0] + ux * i0, p[1] + uy * i0], Bq = [p[0] + ux * i1, p[1] + uy * i1];

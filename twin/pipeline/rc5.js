@@ -6,7 +6,7 @@
    - step5R1C: 코덱스 실험 엔진(tools/experiment-5r1c.mjs)의 계산식 그대로 (질량 노드를 구간 안에서 정확 적분)
    - 15분 간격, 같은 하루를 3번 돌려 축열을 맞춘 뒤 4번째 하루를 결과로 씀 (EnergyPlus 설계일 예열과 같은 방식)
    ═══════════════════════════════════════════════════════════════════════════ */
-import { EP_USE, BUSAN, priceAt } from './energyplus.js';
+import { EP_USE, BUSAN, priceAt, inFootprint, coveredBy } from './energyplus.js';
 
 const AIR = 1206;                                    // 공기 열용량 J/(m³·K)
 const r3 = v => Math.round(v * 1000) / 1000;
@@ -50,29 +50,35 @@ export function roomParams(B, k = {}){
   const north = B.site?.northDeg ?? 0, out = {};
   const kw = {}, hkw = {}, inKw = {};
   for (const a of B.idus || []) { kw[a.room] = (kw[a.room] || 0) + (a.coolKw || 0); hkw[a.room] = (hkw[a.room] || 0) + (a.heatKw || (a.coolKw || 0) * 1.1); inKw[a.room] = (inKw[a.room] || 0) + (a.ratedKw || 0); }
+  const below = f => f.below === true || /^B\d+F?$/i.test(f.id);      // 지하층: 외벽·바닥이 흙(지면 온도)에 닿고 창·일사·지붕 없음
   B.floors.forEach((f, li) => {
-    const above = B.floors[li + 1], foot = f.footprint?.length >= 3 ? f.footprint : [[0, 0], [W, 0], [W, D], [0, D]];
-    const covered = (x, y) => above && (above.footprint?.length >= 3 ? inPoly(x, y, above.footprint) : true);
+    const under = below(f), above = B.floors[li + 1];
+    const covered = (x, y) => coveredBy(above, x, y, W, D), inFoot = (x, y) => inFootprint(x, y, f.footprint, W, D);
     for (const r of f.rooms) {
       if (r.type !== 'room') continue;
       const Af = Math.abs(area(r.polygon)) - (r.holes || []).reduce((t, h) => t + Math.abs(area(h)), 0); if (!(Af > .5)) continue;
       const xs = r.polygon.map(p => p[0]), ys = r.polygon.map(p => p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-      const roof = !covered(cx, cy), ground = li === 0;
-      let Aop = 0; const wins = [], walls = [];
+      const roof = !under && !covered(cx, cy), ground = li === 0;
+      let Aop = 0, Agw = 0; const wins = [], walls = [];
       r.polygon.forEach((p, i) => {
         const q = r.polygon[(i + 1) % r.polygon.length], len = Math.hypot(q[0] - p[0], q[1] - p[1]); if (len < .3) return;
         const nx = -(q[1] - p[1]) / len, ny = (q[0] - p[0]) / len, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
-        const outA = !inPoly(mx + nx * .4, my + ny * .4, foot), outB = !inPoly(mx - nx * .4, my - ny * .4, foot); if (!outA && !outB) return;
+        const outA = !inFoot(mx + nx * .4, my + ny * .4), outB = !inFoot(mx - nx * .4, my - ny * .4); if (!outA && !outB) return;
+        if (under) { Agw += len * FH; return; }                           // 흙에 닿은 벽
         const [ox, oy] = outA ? [nx, ny] : [-nx, -ny];                    // 바깥쪽 법선 (도면: x 동쪽, y 남쪽)
         const az = Math.atan2(-ox, oy) * 180 / Math.PI + north;            // 남쪽 기준 방위각 (서쪽 +)
         const Aw = len >= 1.2 ? (len - .6) * wh : 0;
         Aop += len * FH - Aw; walls.push({ az, a:len * FH - Aw }); if (Aw) wins.push({ az, a:Aw });
       });
-      const Aw = wins.reduce((t, w) => t + w.a, 0), Hop = U.wall * Aop + (roof ? U.roof * Af : 0), Am = 2.5 * Af, Hms = 9.1 * Am * km;
-      const Hem = Hop > 0 ? 1 / (1 / Hop - 1 / Hms) : 0, Hg = ground ? U.slab * Af : 0;
+      // 실내 표면적: ISO 기본 4.5·Af, 단 작은 칸(매점·키오스크)은 벽이 바닥보다 훨씬 커서 실제 둘레 × 층높이 + 바닥·천장을 씀
+      //   (기본값을 그대로 쓰면 1~4 m² 칸에서 표면·열용량이 너무 작아 일사가 갈 곳이 없어 50°C까지 오름 — 부산역 보정에서 발견)
+      const perim = r.polygon.reduce((t, p, i) => { const q = r.polygon[(i + 1) % r.polygon.length]; return t + Math.hypot(q[0] - p[0], q[1] - p[1]); }, 0);
+      const At = Math.max(4.5 * Af, 2 * Af + perim * FH), sA = At / (4.5 * Af);
+      const Aw = wins.reduce((t, w) => t + w.a, 0), Hop = U.wall * Aop + (roof ? U.roof * Af : 0), Am = 2.5 * Af * sA, Hms = 9.1 * Am * km;
+      const Hem = Hop > 0 ? 1 / (1 / Hop - 1 / Hms) : 0, Hg = (ground ? U.slab * Af : 0) + U.wall * Agw;
       const use = EP_USE[r.use] ? r.use : 'office';
       out[r.id] = { id:r.id, floor:f.id, use, area:r3(Af), volume:r3(Af * FH), people:r.capacity > 0 ? r.capacity : r3(Af * .05), roof, ground, wins, walls, ks,
-        model:{ air_surface_W_K:3.45 * 4.5 * Af, mass_surface_W_K:Hms, mass_outdoor_W_K:(Hem + Hg) * ke, window_outdoor_W_K:U.win * Aw * ke, mass_capacity_J_K:165000 * Af * kc },
+        model:{ air_surface_W_K:3.45 * At, mass_surface_W_K:Hms, mass_outdoor_W_K:(Hem + Hg) * ke, window_outdoor_W_K:U.win * Aw * ke, mass_capacity_J_K:165000 * Af * sA * kc },
         Hg:Hg * ke, coolW:(kw[r.id] || 0) * 1000, heatW:(hkw[r.id] || 0) * 1000, cop:inKw[r.id] ? kw[r.id] / inKw[r.id] : 3.2,
         lightsW:EP_USE[use].lights * Af, equipW:EP_USE[use].equip * Af };
     }

@@ -1,7 +1,7 @@
 {
  "schema": "twin.rc5-calibration/v1",
  "building": "PNU-ENG6",
- "generatedAt": "2026-11-20T10:15:20.756Z",
+ "generatedAt": "2026-11-20T10:41:29.942Z",
  "engine": "5R1C (ISO 13790) vs EnergyPlus 24.2",
  "criteria": "ASHRAE Guideline 14 시간 단위: CV(RMSE) ≤ 30%, NMBE ±10% (노션 3차 초안 제안값과 같음) · 보정일 3일과 검증일 2일은 서로 다른 날·날씨",
  "response": "설정 변경 반응 = 운전 중 전 실 2시간 +2°C일 때 하루 전력 변화, 오차 ±25% 이내를 목표로 둠(우리 기준)",
@@ -14,7 +14,7 @@
     "solar": 1,
     "couple": 0.4
    },
-   "factor": 1.364,
+   "factor": 1.306,
    "calib": {
     "days": [
      "2026-11-20",
@@ -23,13 +23,13 @@
     ],
     "hours": 33,
     "epDeltaKwh": 66.743,
-    "rcDeltaKwh": 65.176,
-    "responseErrPct": -2.348,
+    "rcDeltaKwh": 62.696,
+    "responseErrPct": -6.064,
     "epKwh": 507.882,
     "rcKwh": 507.882,
-    "cvrmsePct": 23.075,
+    "cvrmsePct": 23.152,
     "nmbePct": 0,
-    "tempRmseC": 0.561
+    "tempRmseC": 0.492
    },
    "valid": {
     "days": [
@@ -38,19 +38,19 @@
     ],
     "hours": 22,
     "epDeltaKwh": 54.092,
-    "rcDeltaKwh": 46.543,
-    "responseErrPct": -13.957,
+    "rcDeltaKwh": 45.108,
+    "responseErrPct": -16.608,
     "epKwh": 377.943,
-    "rcKwh": 378.865,
-    "cvrmsePct": 25.716,
-    "nmbePct": -0.256,
-    "tempRmseC": 0.559
+    "rcKwh": 379.036,
+    "cvrmsePct": 25.602,
+    "nmbePct": -0.303,
+    "tempRmseC": 0.51
    },
    "pass": true,
    "responsePass": true,
    "seconds": {
-    "energyplus": 0.038,
-    "rc5": 0.038
+    "energyplus": 0.112,
+    "rc5": 0.016
    }
   },
   "cool": {
@@ -60,7 +60,7 @@
     "solar": 0.5,
     "couple": 1
    },
-   "factor": 1.346,
+   "factor": 1.342,
    "calib": {
     "days": [
      "2026-07-20",
@@ -69,11 +69,11 @@
     ],
     "hours": 36,
     "epDeltaKwh": -54.655,
-    "rcDeltaKwh": -54.317,
-    "responseErrPct": 0.619,
+    "rcDeltaKwh": -54.679,
+    "responseErrPct": -0.044,
     "epKwh": 1599.88,
     "rcKwh": 1599.88,
-    "cvrmsePct": 5.693,
+    "cvrmsePct": 5.664,
     "nmbePct": 0,
     "tempRmseC": 0.054
    },
@@ -84,19 +84,19 @@
     ],
     "hours": 24,
     "epDeltaKwh": -40.248,
-    "rcDeltaKwh": -40.73,
-    "responseErrPct": -1.197,
+    "rcDeltaKwh": -40.979,
+    "responseErrPct": -1.815,
     "epKwh": 1207.133,
-    "rcKwh": 1172.773,
-    "cvrmsePct": 7.151,
-    "nmbePct": 2.97,
+    "rcKwh": 1173.553,
+    "cvrmsePct": 7.061,
+    "nmbePct": 2.903,
     "tempRmseC": 0.079
    },
    "pass": true,
    "responsePass": true,
    "seconds": {
-    "energyplus": 0.054,
-    "rc5": 0.041
+    "energyplus": 0.04,
+    "rc5": 0.036
    }
   }
  }

@@ -198,6 +198,17 @@
   #floorView.pre.in{opacity:1}
   #floorView.pre:not(.in):not(.leaving) #plan .tint, #floorView.pre:not(.in):not(.leaving) #plan .chip, #floorView.pre:not(.in):not(.leaving) #plan .idu{animation:none;opacity:0}
   #floorView.leaving #plan *{animation:none !important}
+  /* 층 보기 2D(평면도) ↔ 3D(같은 층을 기울여 본 모델) 전환: 오른쪽 위 */
+  #planMode{position:absolute;top:12px;right:12px;z-index:6;display:flex;padding:3px;gap:2px;border-radius:999px}
+  #planMode button{min-width:44px;height:32px;padding:0 12px;border-radius:999px;font-weight:600}
+  #planMode button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  body.plan3d #floorView{pointer-events:none}
+  body.plan3d #floorView #planMode, body.plan3d #floorView #floorTabs, body.plan3d #floorView #floorStats{pointer-events:auto}
+  /* 전환은 겹쳐 녹듯이: 평면도가 같은 각도의 3D 위에서 서서히 사라지고(또는 떠오르고) 카메라가 기울어짐 */
+  #planWrap{transition:opacity .55s ease}
+  #planBox{transition:background-color .55s ease, box-shadow .55s ease, backdrop-filter .55s ease, -webkit-backdrop-filter .55s ease}
+  body.plan3d #planWrap{opacity:0}
+  body.plan3d #planBox{background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
   #planBox{flex:1;min-width:0;position:relative;border-radius:var(--r-md);overflow:hidden;display:flex;flex-direction:column}
   #planWrap{flex:1;min-height:0;margin:0 12px;border-radius:var(--r-sm);background:var(--paper);box-shadow:inset 0 0 0 1px var(--hairline);overflow:hidden;position:relative}
   #plan{width:100%;height:100%;display:block}
@@ -530,6 +541,7 @@
     <section id="dataPanel" class="glass" aria-hidden="true"></section>
     <section id="floorView">
       <div id="planBox" class="glass">
+        <div id="planMode" class="seg glass" role="group" aria-label="층 보기 방식"><button type="button" data-pm="2d" aria-pressed="true" title="평면도">2D</button><button type="button" data-pm="3d" aria-pressed="false" title="기울인 3D">3D</button></div>
         <div id="floorTabs"></div>
         <div id="planWrap"><svg id="plan" preserveAspectRatio="xMidYMid meet"></svg></div>
         <div id="floorStats"></div>
@@ -572,6 +584,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { wallSpans } from './pipeline/wall-spans.js';
+import { foldedRoofGeometry } from './pipeline/folded-roof.js';
 
 /* ═════════════════════════ config ═════════════════════════ */
 const params = new URLSearchParams(location.search);
@@ -647,12 +660,16 @@ function dataGate(){
 }
 await loadTwinData();
 const BD = DATA.building;
+const foldedExterior = BD.building?.facade?.roofProfile?.length > 2;
+const taperedExterior = BD.floors.some(f => f.shellFootprint?.length);
+const exteriorFirst = foldedExterior || taperedExterior || !!BD.building?.facade?.dome;
+const mappedExterior = exteriorFirst || BD.floors.some(f => f.footprint?.length);
 const CFG = {
   buildingName: BD.building?.name || '건물',
   allowedOrigin: params.get('origin') || null,
 };
 let W = BD.building?.size?.w || 48, D = BD.building?.size?.d || 35;
-const FH = BD.building?.floorHeight || 3.6, GAP = 0.9, CEIL = BD.building?.ceiling || 2.8;
+const FH = BD.building?.floorHeight || 3.6, GAP = taperedExterior ? .18 : .9, CEIL = BD.building?.ceiling || 2.8;
 const USER = { floors: !(BD.atrium && BD.elevator) };   // 중정·승강기 정보가 없으면 일반형 렌더링
 const S = Math.max(W, D) > 70 ? 16 : 28, M = 4.5;          // 2D 도면 px/m (큰 건물은 낮춤)
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -738,7 +755,17 @@ function inPoly(x, y, poly){
 }
 const IDU_BY_ROOM = {};
 for (const a of BD.idus || []) (IDU_BY_ROOM[a.room] ||= []).push(a);
-const FLOORS = BD.floors.map((f, fi) => ({ id:f.id, index:fi, plan:null, hasVoid:!!f.atrium, footprint:f.footprint || null, note:f.note || null,
+// 층 순서: 아래층부터. 지하층(id 'B1'·'B2'… 또는 below:true)은 지면 아래 — 층 번호가 모두 읽히면 번호순(B2, B1, 1F, 2F…)으로 맞춤
+const FLOOR_NO = f => /^\d+F$/i.test(f.id) ? parseInt(f.id) : /^B\d+F?$/i.test(f.id) ? -parseInt(f.id.slice(1)) : null;
+const BELOW = f => f.below === true || (FLOOR_NO(f) ?? 0) < 0;
+const BD_FLOORS = BD.floors.every(f => FLOOR_NO(f) != null) ? [...BD.floors].sort((a, b) => FLOOR_NO(a) - FLOOR_NO(b)) : BD.floors;
+const NB = BD_FLOORS.filter(BELOW).length;          // 지하층 수
+// 층 윤곽: 다각형 하나 또는 여러 개(떨어진 동이 여러 채인 층 — 서서울미술관 1층처럼). 안쪽에서는 늘 '고리 목록'으로 다룸
+//   topFootprint: 그 층 외피 윗변의 윤곽 — 있으면 바닥 윤곽에서 그 윤곽까지 기울어진 곡면 외피(디아크처럼 위로 벌어지는 건물)
+//   open: 지붕 정원·데크처럼 외피 없는 층 · green: 바닥을 잔디·정원 색으로
+const LOOPS = fp => !fp?.length ? null : Array.isArray(fp[0]?.[0]) ? (fp.filter(l => l?.length >= 3).length ? fp.filter(l => l?.length >= 3) : null) : fp.length >= 3 ? [fp] : null;
+const inFoot = (x, y, ls) => ls.some(l => inPoly(x, y, l));
+const FLOORS = BD_FLOORS.map((f, fi) => ({ id:f.id, index:fi, below:BELOW(f), plan:null, hasVoid:!!f.atrium, footprint:LOOPS(f.footprint), shellFootprint:LOOPS(f.shellFootprint), top:LOOPS(f.topFootprint), open:!!f.open, green:!!f.green, note:f.note || null,
   openings:f.openWalls || [], partitions:f.partitions || [],
   rooms:f.rooms.map(r => ({ id:r.id, floorId:f.id, floorIndex:fi, name:r.name, num:r.number || null, type:r.type || 'room', poly:r.holes?.length ? Object.assign([...r.polygon], { holes:r.holes }) : r.polygon,
     kind:r.use || (r.type === 'room' || !r.type ? 'office' : 'none'), cap:r.capacity || 0, finish:r.finish || null, zoneOf:r.zoneOf || null, zoneBasis:r.zoneBasis || null,
@@ -755,7 +782,7 @@ for (const r of ROOMS) {
   r.extEdges = r.poly.map((p, i) => { const q = r.poly[(i+1) % r.poly.length];
     const fp = FLOOR_FOOT[r.floorId];
     if (fp) { const len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, nx = -(q[1] - p[1]) / len * .4, ny = (q[0] - p[0]) / len * .4, mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
-      return !inPoly(mx + nx, my + ny, fp) || !inPoly(mx - nx, my - ny, fp); }                       // 층 윤곽 밖에 닿은 변 = 외벽
+      return !inFoot(mx + nx, my + ny, fp) || !inFoot(mx - nx, my - ny, fp); }                       // 층 윤곽 밖에 닿은 변 = 외벽
     return (p[1] === 0 && q[1] === 0) || (p[1] === D && q[1] === D) || (p[0] === 0 && q[0] === 0) || (p[0] === W && q[0] === W); });
   for (const a of r.acs) { a.room = r; a.odu = a.odu || `ODU-${r.floorId}-${a.x < W/2 ? 'W' : 'E'}`; a.status = 'off'; a.power = 0; IDUS.push(a); }
 }
@@ -835,9 +862,9 @@ function drawPlan(f){
   for (const {a,b} of f.partitions) strokeWall(a,b);
   g.stroke();
   if (f.hasVoid) { g.strokeStyle = '#41607a'; g.lineWidth = .1 * S; g.strokeRect(X(VOID.x0), Y(VOID.y0), (VOID.x1 - VOID.x0)*S, (VOID.y1 - VOID.y0)*S); }
-  g.strokeStyle = '#2a2a2a'; g.lineWidth = .3 * S; if (f.footprint) loop(f.footprint); else g.strokeRect(X(0), Y(0), W*S, D*S);
+  g.strokeStyle = '#2a2a2a'; g.lineWidth = .3 * S; if (f.footprint) f.footprint.forEach(loop); else g.strokeRect(X(0), Y(0), W*S, D*S);
   g.fillStyle = '#2a2a2a';
-  for (const x of ax) for (const y of ay) if ((USER.floors || !(x > VOID.x0 && x < VOID.x1 && y > VOID.y0 && y < VOID.y1)) && (!f.footprint || inPoly(x, y, f.footprint))) g.fillRect(X(x) - .25*S, Y(y) - .25*S, .5*S, .5*S);
+  for (const x of ax) for (const y of ay) if ((USER.floors || !(x > VOID.x0 && x < VOID.x1 && y > VOID.y0 && y < VOID.y1)) && (!f.footprint || inFoot(x, y, f.footprint))) g.fillRect(X(x) - .25*S, Y(y) - .25*S, .5*S, .5*S);
   // windows on exterior edges
   for (const r of f.rooms) {
     if (r.type === 'core' || r.type === 'store') continue;
@@ -1105,7 +1132,7 @@ function planTexture(f){
   return texCache[k];
 }
 const toWorld = (x, y, h = 0) => new THREE.Vector3(x - W/2, h, y - D/2);
-const floorY = i => i * (FH + GAP);
+const floorY = i => (i - NB) * (FH + GAP);          // 1층 바닥 = 지면(0), 지하층은 그 아래
 // 겹친 점 제거: 같은 자리 점이 이어지면 길이 0인 벽면이 생기고, 그 면의 법선이 0이라 조명 계산이 NaN →
 // 블룸 흐림이 NaN을 번지게 해서 화면에 검은 네모가 한 프레임씩 깜빡임. 휜 윤곽(스카이뷰 보정)·안쪽 들여쓰기에서 잘 생김
 function cleanLoop(pts, eps = .02){
@@ -1121,12 +1148,35 @@ function shapeOf(poly, inset = 0){
   return s;
 }
 // 층 윤곽(footprint)이 있으면 그 모양으로, 없으면 W×D 사각형
+//   윤곽이 여러 개(떨어진 동)면 모양도 여러 개로 한꺼번에 밀어 올림
+function footShapes(foot, pad = 0){
+  const ls = LOOPS(foot);
+  return ls ? ls.map(l => new THREE.Shape(cleanLoop(l.map(([x, y]) => new THREE.Vector2(x, -y)))))
+    : [new THREE.Shape([new THREE.Vector2(-pad, pad), new THREE.Vector2(W + pad, pad), new THREE.Vector2(W + pad, -(D + pad)), new THREE.Vector2(-pad, -(D + pad))])];
+}
 function slabGeometry(hole, pad = .3, depth = .3, foot = null){
-  const s = foot?.length >= 3 ? new THREE.Shape(cleanLoop(foot.map(([x, y]) => new THREE.Vector2(x, -y))))
-    : new THREE.Shape([new THREE.Vector2(-pad, pad), new THREE.Vector2(W + pad, pad), new THREE.Vector2(W + pad, -(D + pad)), new THREE.Vector2(-pad, -(D + pad))]);
-  if (hole) s.holes.push(new THREE.Path([new THREE.Vector2(VOID.x0, -VOID.y0), new THREE.Vector2(VOID.x0, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y0)]));
-  const geo = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled:false });
+  const ss = footShapes(foot, pad);
+  if (hole) ss[0].holes.push(new THREE.Path([new THREE.Vector2(VOID.x0, -VOID.y0), new THREE.Vector2(VOID.x0, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y0)]));
+  const geo = new THREE.ExtrudeGeometry(ss, { depth, bevelEnabled:false });
   geo.rotateX(-Math.PI/2); geo.translate(-W/2, -depth, -D/2); return geo;
+}
+/* 곡면 외피(로프트): 아래 윤곽 bot(y=0)과 위 윤곽 top(y=h)을 둘레 길이 기준으로 같은 개수 N점씩 다시 찍고,
+   위 윤곽의 시작점을 아래와 가장 가깝게 돌려 맞춘 뒤(꼬임 방지) 이웃 점끼리 사각형 띠로 이음.
+   반환: { geo, b, t (도면 좌표 점 목록), perim(아래 둘레) } */
+function loftGeometry(bot, top, h, N = 128){
+  const ccw = l => { let s = 0; for (let i = 0; i < l.length; i++) { const [x0, y0] = l[i], [x1, y1] = l[(i + 1) % l.length]; s += x0 * y1 - x1 * y0; } return s > 0 ? l : [...l].reverse(); };
+  const resample = l => { const L = [0]; for (let i = 0; i < l.length; i++) { const [x0, y0] = l[i], [x1, y1] = l[(i + 1) % l.length]; L.push(L[i] + Math.hypot(x1 - x0, y1 - y0)); }
+    const P = L[l.length], out = []; let j = 0;
+    for (let k = 0; k < N; k++) { const s = P * k / N; while (L[j + 1] < s) j++; const [x0, y0] = l[j], [x1, y1] = l[(j + 1) % l.length], u = (s - L[j]) / Math.max(1e-9, L[j + 1] - L[j]); out.push([lerp(x0, x1, u), lerp(y0, y1, u)]); }
+    return { pts:out, perim:P }; };
+  const B = resample(ccw(bot)), T0 = resample(ccw(top)).pts;
+  let best = 0, bd = Infinity;
+  for (let s = 0; s < N; s++) { let d = 0; for (let k = 0; k < N; k += 4) { const a = B.pts[k], c = T0[(k + s) % N]; d += (a[0] - c[0]) ** 2 + (a[1] - c[1]) ** 2; } if (d < bd) { bd = d; best = s; } }
+  const T = B.pts.map((_, k) => T0[(k + best) % N]), pos = [], idx = [];
+  for (const [l, y] of [[B.pts, 0], [T, h]]) for (const [x, z] of l) pos.push(x - W/2, y, z - D/2);
+  for (let k = 0; k < N; k++) { const k1 = (k + 1) % N; idx.push(k, k1, N + k1, k, N + k1, N + k); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  return { geo, b:B.pts, t:T, perim:B.perim };
 }
 function dispose(obj){ obj.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
 function glowTexture(color){
@@ -1275,18 +1325,18 @@ const floorGroups = [], pickables = [];
 for (const f of FLOORS) {
   if (!f.plan) f.plan = drawPlan(f);
   const grp = new THREE.Group(); grp.position.y = floorY(f.index); grp.userData = { floor:f, lift:0, fade:1, intro:0 };
-  const slab = new THREE.Mesh(slabGeometry(f.hasVoid, .3, .3, f.footprint), new THREE.MeshStandardMaterial({ color:isDark() ? 0x5b5e63 : 0xc1c1c1, roughness:.92, metalness:0, envMapIntensity:.35, transparent:true }));
+  const slab = new THREE.Mesh(slabGeometry(f.hasVoid, .3, .3, f.shellFootprint || f.footprint), new THREE.MeshStandardMaterial({ color:f.green ? (isDark() ? 0x4f9a5e : 0x8cc28f) : isDark() ? 0x5b5e63 : 0xc1c1c1, roughness:.92, metalness:0, envMapIntensity:.35, transparent:true }));
   slab.userData.floor = f; grp.add(slab); pickables.push(slab); grp.userData.slabMat = slab.material;
   // 평면도 판: 층 윤곽(footprint) 모양으로 잘라 바닥판과 크기를 맞춤 (중정은 비움)
-  const fl = f.footprint?.length >= 3 ? f.footprint : [[0, 0], [W, 0], [W, D], [0, D]];
-  const ps = new THREE.Shape(cleanLoop(fl.map(([x, y]) => new THREE.Vector2(x, -y))));
-  if (f.hasVoid) ps.holes.push(new THREE.Path([new THREE.Vector2(VOID.x0, -VOID.y0), new THREE.Vector2(VOID.x0, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y0)]));
+  const ps = footShapes(f.footprint);
+  if (f.hasVoid) ps[0].holes.push(new THREE.Path([new THREE.Vector2(VOID.x0, -VOID.y0), new THREE.Vector2(VOID.x0, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y1), new THREE.Vector2(VOID.x1, -VOID.y0)]));
   const pg = new THREE.ShapeGeometry(ps); pg.rotateX(-Math.PI/2); pg.translate(-W/2, 0, -D/2);
   const p = f.plan, u0 = p.ox / p.w, u1 = (p.ox + W*p.S) / p.w, vt = 1 - p.oy / p.h, vb = 1 - (p.oy + D*p.S) / p.h;
   const uv = pg.attributes.uv, pos = pg.attributes.position;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, lerp(u0, u1, (pos.getX(i) + W/2) / W), lerp(vt, vb, (pos.getZ(i) + D/2) / D));
   const planMesh = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ map: planTexture(f), color: isDark() ? 0xffffff : 0xc4ccd8, transparent:true }));
   planMesh.position.y = .012; planMesh.renderOrder = -1; grp.add(planMesh); grp.userData.planMat = planMesh.material;
+  if (f.green) planMesh.visible = false;          // 옥상정원·잔디: 평면도 그림 대신 바닥판 색(잔디)이 보이게
   grp.userData.blocks = []; grp.userData.coreMat = new THREE.MeshStandardMaterial({ color:0xb7c0cc, roughness:.6, metalness:.1, transparent:true, opacity:.92 });
   for (const r of f.rooms) {
     if (!r.acs.length) continue;   // 복도·화장실·계단 등 냉방 없는 공간은 표시하지 않음
@@ -1315,41 +1365,123 @@ for (const f of FLOORS) {
     m.position.copy(toWorld(a.x, a.y, CEIL - .1)); m.visible = false; grp.add(m); grp.userData.idus.push({ a, m });
   }
   // 외피(유리·멀리언·테두리·네온): 층 윤곽(footprint)을 따라 — 스카이뷰로 모양 보정된 윤곽도 그대로 보임
-  const loop = f.footprint?.length >= 3 ? f.footprint : [[0, 0], [W, 0], [W, D], [0, D]], hH = FH - .3;
-  const facade = BD.building?.facade;
-  const shell = new THREE.Mesh(slabGeometry(false, 0, hH, loop), new THREE.MeshPhysicalMaterial({ color:facade?.glassColor ?? 0xaecbff, transparent:true, opacity:facade?.glassOpacity ?? .06, roughness:.05, metalness:0, envMapIntensity:1.2, depthWrite:false, side:THREE.BackSide }));
-  shell.position.y = hH; grp.add(shell);
-  { // curtain-wall mullions around the perimeter
-    const seg = [], step = 1.6;
-    loop.forEach(([x0, y0], i) => { const [x1, y1] = loop[(i + 1) % loop.length], n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / step));
-      for (let k = 0; k < n; k++) { const p = toWorld(lerp(x0, x1, k / n), lerp(y0, y1, k / n)); seg.push(p.x, 0, p.z, p.x, hH, p.z); } });
-    const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
-    const mull = new THREE.LineSegments(mg, new THREE.LineBasicMaterial({ color:facade?.mullionColor ?? 0x9fb3cf, transparent:true, opacity:.22 })); grp.add(mull); grp.userData.mullMat = mull.material;
+  const loops = f.shellFootprint || f.footprint || [[[0, 0], [W, 0], [W, D], [0, D]]], hH = FH - .3;
+  const facade = BD.building?.facade, diagrid = facade?.pattern === 'diagrid';
+  // 외피 재질: 지하층 = 흙에 묻힌 콘크리트 옹벽(옅게) · 지상 = 유리(또는 facade 색·불투명도 — 디아크처럼 금속 패널이면 불투명도를 올림)
+  const shellMat = f.below
+    ? new THREE.MeshStandardMaterial({ color:isDark() ? 0x5d636e : 0x9aa1ab, transparent:true, opacity:.16, roughness:.95, metalness:0, depthWrite:false, side:THREE.BackSide })
+    : new THREE.MeshPhysicalMaterial({ color:facade?.glassColor ?? 0xaecbff, transparent:true, opacity:exteriorFirst ? .2 : facade?.glassOpacity ?? .06, roughness:facade?.roughness ?? (exteriorFirst ? .38 : .05), metalness:facade?.metalness ?? 0, envMapIntensity:exteriorFirst ? .65 : 1.2, depthWrite:false, side:f.top || exteriorFirst ? THREE.DoubleSide : THREE.BackSide });
+  const lineMat = new THREE.LineBasicMaterial({ color:facade?.mullionColor ?? 0x9fb3cf, transparent:true, opacity:diagrid ? .5 : .22 }), seg = [], frameSeg = [];
+  const pushLoop = (l, y, out) => l.forEach(([x0, y0], i) => { const [x1, y1] = l[(i + 1) % l.length], a = toWorld(x0, y0), b = toWorld(x1, y1); out.push(a.x, y, a.z, b.x, y, b.z); });
+  if (f.open) {
+    // 지붕 정원·데크: 외피 없음, 바닥 테두리만
+    for (const l of loops) pushLoop(l, .3, frameSeg);
+  } else if (f.top) {
+    // 기울어진 곡면 외피: 바닥 윤곽 → 윗 윤곽(topFootprint)을 같은 개수의 점으로 맞춰 띠로 이음 (디아크처럼 위로 벌어지는 그릇 모양)
+    // 층 사이 띄움(GAP)까지 이어 위층 바닥판 밑면에 닿게 → 층별 띠가 끊기지 않고 한 곡면으로 보임
+    const hL = FH + GAP - .3;
+    loops.forEach((l, li) => {
+      const tl = f.top[li] ?? f.top[0], L = loftGeometry(l, tl, hL);
+      const shell = new THREE.Mesh(L.geo, shellMat);
+      shell.userData.floor = f;
+      grp.add(shell);
+      // 외피는 클릭 대상에서 뺌: 반투명 외피 안의 방을 바로 고를 수 있게
+      pushLoop(l, 0, frameSeg); pushLoop(tl, hL, frameSeg);
+      // 디아그리드(마름모 격자): 아래 점 k에서 위 점 k±m으로 / 아니면 세로 멀리언
+      const N = L.b.length, m = Math.max(1, Math.round(hL / (L.perim / N)));
+      for (let k = 0; k < N; k += 2) {
+        const a = toWorld(...L.b[k]);
+        for (const d of diagrid ? [m, -m] : [0]) { const t = toWorld(...L.t[(k + d + N) % N]); seg.push(a.x, 0, a.z, t.x, hL, t.z); }
+      }
+    });
+  } else {
+    const shell = new THREE.Mesh(slabGeometry(false, 0, hH, loops), shellMat);
+    shell.position.y = hH; shell.userData.floor = f; grp.add(shell);
+    // 외피는 클릭 대상에서 뺌: 반투명 외피 안의 방을 바로 고를 수 있게
+    for (const l of loops) {
+      pushLoop(l, 0, frameSeg); pushLoop(l, hH, frameSeg);
+      if (!f.below) l.forEach(([x0, y0], i) => { const [x1, y1] = l[(i + 1) % l.length], n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 1.6));
+        for (let k = 0; k < n; k++) { const p = toWorld(lerp(x0, x1, k / n), lerp(y0, y1, k / n)); (k ? seg : frameSeg).push(p.x, 0, p.z, p.x, hH, p.z); } });   // 꼭짓점 기둥은 테두리, 나머지는 멀리언
+    }
   }
-  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(slabGeometry(false, 0, hH, loop), 20), new THREE.LineBasicMaterial({ color:0x7b8798, transparent:true, opacity:.45 }));
-  frame.position.y = hH; grp.add(frame); grp.userData.frame = frame;
+  if (seg.length && !f.below) { const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+    const mull = new THREE.LineSegments(mg, lineMat); grp.add(mull); grp.userData.mullMat = mull.material; }
+  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(frameSeg, 3));
+  const frame = new THREE.LineSegments(fg, new THREE.LineBasicMaterial({ color:0x7b8798, transparent:true, opacity:.45 }));
+  grp.add(frame); grp.userData.frame = frame;
   { // neon edge ring per floor (coloured by the floor's average of the current metric)
-    const t = .09, parts = loop.map(([x0, y0], i) => { const [x1, y1] = loop[(i + 1) % loop.length], L = Math.hypot(x1 - x0, y1 - y0); if (L < .01) return null;
-      const g = new THREE.BoxGeometry(L + t, t, t); g.rotateY(-Math.atan2(y1 - y0, x1 - x0)); const c = toWorld((x0 + x1) / 2, (y0 + y1) / 2); return g.translate(c.x, .03, c.z); }).filter(Boolean);
+    const t = .09, parts = loops.flatMap(loop => loop.map(([x0, y0], i) => { const [x1, y1] = loop[(i + 1) % loop.length], L = Math.hypot(x1 - x0, y1 - y0); if (L < .01) return null;
+      const g = new THREE.BoxGeometry(L + t, t, t); g.rotateY(-Math.atan2(y1 - y0, x1 - x0)); const c = toWorld((x0 + x1) / 2, (y0 + y1) / 2); return g.translate(c.x, .03, c.z); })).filter(Boolean);
     const neon = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshBasicMaterial({ color:0x5b8cff, transparent:true, toneMapped:false, depthWrite:false }));
     grp.add(neon); grp.userData.neon = neon; grp.userData.neonC = new THREE.Color(0x5b8cff);
   }
   bScene.add(grp); floorGroups.push(grp);
 }
 const totalH = floorY(FLOORS.length - 1) + FH;
-const roofY = floorY(FLOORS.length - 1) + FH - .1;
+const topFloor = FLOORS.at(-1);
+const roofOutline = topFloor.top || topFloor.footprint;
+const roofY = floorY(topFloor.index) + (topFloor.top ? FH + GAP - .6 : FH - .1);
+const bottomY = floorY(0);                            // 가장 아래층 바닥 (지하층이 있으면 음수)
+// 지하층이 있으면 땅을 잘라 낸 단면처럼: 건물 둘레 흙 덩어리(안쪽 면만 옅게) + 지면 테두리선
+const soil = NB ? (() => {
+  const fp = FLOORS.filter(f => f.below).flatMap(f => (f.footprint || [[[0, 0], [W, 0], [W, D], [0, D]]]).flat());
+  const b = bbox(fp), m = 4, dep = -bottomY + .42 + .6;
+  const geo = new THREE.BoxGeometry(b.w + 2 * m, dep, b.h + 2 * m); geo.translate(b.cx - W / 2, -.42 - dep / 2, b.cy - D / 2);
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color:isDark() ? 0x6b5640 : 0xa88a66, transparent:true, opacity:isDark() ? .16 : .13, roughness:1, depthWrite:false, side:THREE.BackSide })));
+  g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color:isDark() ? 0x9c7f5c : 0x8d6d48, transparent:true, opacity:.35 })));
+  bScene.add(g); return g;
+})() : null;
 // roof + outdoor units with spinning fans
 const roof = new THREE.Group(); bScene.add(roof);
-{
-  const slab = new THREE.Mesh(slabGeometry(!USER.floors, .3, .3, FLOORS[FLOORS.length - 1].footprint), new THREE.MeshStandardMaterial({ color:isDark() ? 0x3a3c40 : 0xdddddd, roughness:.95, metalness:0, envMapIntensity:.25, transparent:true, opacity:isDark() ? .5 : .45, depthWrite:false }));
-  slab.position.y = roofY + .3; roof.add(slab); roof.userData.mat = slab.material;
-  const re = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color:0xa9b8cc, transparent:true, opacity:.5 })); re.position.copy(slab.position); roof.add(re);
+// 지붕: 맨 위층 윗 윤곽(곡면 외피면 topFootprint) 모양 · 맨 위층이 지붕 정원(open)이면 따로 덮지 않음
+if (!topFloor.open) {
+  const facade = BD.building?.facade, roofColor = facade?.roofColor ?? (exteriorFirst ? facade?.glassColor : undefined);
+  const roofTint = roofColor ?? (isDark() ? 0x3a3c40 : 0xdddddd), translucent = { transparent:true, opacity:.59, depthWrite:true };
+  const folded = roofOutline && facade?.roofProfile?.length > 2 && foldedRoofGeometry(roofOutline, facade.roofProfile, W, D, FH * 2);
+  if (folded) {
+    const covering = new THREE.Mesh(folded.roof, new THREE.MeshStandardMaterial({ color:roofTint, roughness:.64, metalness:.24, side:THREE.DoubleSide, ...translucent }));
+    const sides = new THREE.Mesh(folded.sides, new THREE.MeshStandardMaterial({ color:facade.glassColor ?? roofTint, roughness:.55, side:THREE.DoubleSide, ...translucent }));
+    covering.position.y = sides.position.y = roofY + .3;
+    roof.add(covering,sides);
+  } else {
+    const slab = new THREE.Mesh(slabGeometry(!USER.floors, .3, .3, roofOutline), new THREE.MeshStandardMaterial({ color:roofTint, roughness:.7, metalness:0, envMapIntensity:.25, transparent:true, opacity:exteriorFirst ? .32 : roofColor ? .78 : isDark() ? .5 : .45, depthWrite:false }));
+    slab.position.y = roofY + .3; roof.add(slab);
+    const re = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color:0xa9b8cc, transparent:true, opacity:.5 })); re.position.copy(slab.position); roof.add(re);
+  }
+  const dome = facade?.dome;
+  if (dome?.profile?.length > 2 && dome.radius > 0 && dome.height > 0) {
+    const profile = dome.profile.map(([r,h]) => new THREE.Vector2(r * dome.radius, h * dome.height));
+    const cap = new THREE.Mesh(new THREE.LatheGeometry(profile, 64),
+      new THREE.MeshStandardMaterial({ color:roofColor ?? 0xb8bec8, roughness:.6, metalness:.12, ...translucent }));
+    cap.position.copy(toWorld(dome.x, dome.y, roofY + .3));
+    roof.add(cap);
+  }
 }
 const fanMat = new THREE.MeshStandardMaterial({ color:0x3a4250, roughness:.5 });
-const oduObjs = ODUS.map((o, i) => {
-  const k = ODUS.filter(x => x.side === o.side).indexOf(o);
-  const x = o.side === 'W' ? 4 + k * 3.1 : W - 4 - k * 3.1;
-  const g = new THREE.Group(); g.position.copy(toWorld(x, D - 3.4, roofY + .3));
+const placedODUs = [], oduLocations = new Map((BD.odus || []).filter(o => o.pos?.length === 2 && o.pos.every(Number.isFinite)).map(o => [o.id,o.pos]));
+function roofUnitPosition(o) {
+  if (topFloor.open) return null;
+  const recorded = oduLocations.get(o.id), outline = roofOutline || [[[0,0],[W,0],[W,D],[0,D]]];
+  const supports = ([x,y]) => outline.some(loop => [-1.3,0,1.3].every(dx => [-.7,0,.7].every(dy => inPoly(x+dx,y+dy,loop)))) &&
+    placedODUs.every(([u,v]) => Math.abs(x-u) >= 2.8 || Math.abs(y-v) >= 1.6);
+  if (recorded) return supports(recorded) ? recorded : null;
+  if (exteriorFirst) return null;
+  const k = ODUS.filter(other => other.side === o.side).indexOf(o);
+  const preferred = [o.side === 'W' ? 4+k*3.1 : W-4-k*3.1,D-3.4];
+  if (supports(preferred)) return preferred;
+  let best = null, nearest = Infinity;
+  for(let y=1;y<D;y+=1.6)for(let x=1.5;x<W;x+=2.8){
+    const distance = Math.hypot(x-preferred[0],y-preferred[1]);
+    if(distance<nearest && supports([x,y])) { best=[x,y]; nearest=distance; }
+  }
+  return best;
+}
+const oduObjs = ODUS.flatMap(o => {
+  const position = roofUnitPosition(o);
+  if (!position) return [];
+  placedODUs.push(position);
+  const g = new THREE.Group(); g.position.copy(toWorld(...position, roofY + .3));
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.5, 1.1), new THREE.MeshStandardMaterial({ color:0xcfd6df, roughness:.5, metalness:.15, envMapIntensity:.5 }));
   body.position.y = .75; g.add(body);
   const grille = new THREE.Mesh(new THREE.CylinderGeometry(.48, .48, .04, 28), new THREE.MeshStandardMaterial({ color:0x58616e }));
@@ -1360,7 +1492,7 @@ const oduObjs = ODUS.map((o, i) => {
   const led = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 8), new THREE.MeshStandardMaterial({ color:0x22b07d, emissive:0x22b07d, emissiveIntensity:3 }));
   led.position.set(.95, 1.2, .56); g.add(led);
   roof.add(g);
-  return { o, g, fan, led, top:g.position.clone().add(new THREE.Vector3(0, .2, 0)) };
+  return [{ o, g, fan, led, top:g.position.clone().add(new THREE.Vector3(0, .2, 0)) }];
 });
 const oduObj = Object.fromEntries(oduObjs.map(x => [x.o.id, x]));
 // refrigerant piping: IDU → corridor ceiling → riser shaft → roof → ODU
@@ -1372,6 +1504,7 @@ const PIPE_PATHS = [];
   const RX0 = USER.floors ? 1.4 : 11, RX1 = USER.floors ? W - 1.4 : 36.8, RY0 = USER.floors ? D/2 : 10.6, RY1 = USER.floors ? D/2 : 25.4;
   for (const a of IDUS) {
     const f = FLOOR[a.room.floorId], yC = floorY(f.index) + CEIL - .02, side = ODU[a.odu].side, o = oduObj[a.odu];
+    if (!o) continue;
     const sx = side === 'W' ? RX0 : RX1, lane = (f.index - 2) * .22;
     const cand = [[clamp(a.x, RX0, RX1), RY0, 'N'], [clamp(a.x, RX0, RX1), RY1, 'S'], [RX0, clamp(a.y, RY0, RY1), 'W'], [RX1, clamp(a.y, RY0, RY1), 'E']]
       .sort((u, v) => Math.hypot(u[0] - a.x, u[1] - a.y) - Math.hypot(v[0] - a.x, v[1] - a.y))[0];
@@ -1408,11 +1541,12 @@ function pathPoint(P, s, out){
   return out.copy(P.pts[P.pts.length-1]);
 }
 
-const HOME = { pos:new THREE.Vector3(46, totalH * .95 + 24, 58), target:new THREE.Vector3(0, totalH * .4, 0) };
-// elevator shaft + moving cab (in the courtyard, per the plans)
+// 처음 시점: 지하층이 있으면 그만큼 아래까지 화면에 들어오게 가운데를 내림
+const HOME = { pos:new THREE.Vector3(46, totalH * .95 + 24, 58), target:new THREE.Vector3(0, bottomY + (totalH - bottomY) * .4, 0) };
+// elevator shaft + moving cab (in the courtyard, per the plans) — 가장 아래층부터 옥상까지
 const evC = { x:(EV.x0 + EV.x1)/2, y:(EV.y0 + EV.y1)/2 };
-const evShaft = new THREE.Mesh(new THREE.BoxGeometry(EV.x1 - EV.x0, roofY + 1.2, EV.y1 - EV.y0), new THREE.MeshStandardMaterial({ color:0xb8c6d4, transparent:true, opacity:.3, depthWrite:false }));
-evShaft.position.copy(toWorld(evC.x, evC.y, (roofY + 1.2) / 2));
+const evShaft = new THREE.Mesh(new THREE.BoxGeometry(EV.x1 - EV.x0, roofY + 1.2 - bottomY, EV.y1 - EV.y0), new THREE.MeshStandardMaterial({ color:0xb8c6d4, transparent:true, opacity:.3, depthWrite:false }));
+evShaft.position.copy(toWorld(evC.x, evC.y, (roofY + 1.2 + bottomY) / 2));
 const evCab = new THREE.Mesh(new THREE.BoxGeometry(EV.x1 - EV.x0 - .35, 2.3, EV.y1 - EV.y0 - .35), new THREE.MeshStandardMaterial({ color:0xf2c14e, emissive:0xf2a01f, emissiveIntensity:.35, roughness:.4 }));
 if (!USER.floors) bScene.add(evShaft, evCab);
 const fitK = () => clamp(1.55 / camera.aspect, 1, 3) * SC;
@@ -1530,8 +1664,10 @@ let scanY = null, explodeF = null, roofLift = 0;
 function updateBuilding(t, dt){
   if (introStart == null) introStart = t;
   const it = reduceMotion ? 99 : t - introStart, hlOn = performance.now() < HL.until, pulse = 1;   // 깜빡임 금지: 강조는 고정 밝기
+  const showArchitecture = exteriorFirst && !explodeF && !state.pipes;
+  if (soil) soil.visible = !showArchitecture;
   { // scan sweep: 처음 한 번만 건물을 훑으며 드러냄 (10초마다 반복하던 훑기는 화면이 번쩍여 보여 뺌)
-    const top = roofY + 1.5, ph = (it - 1.2) / 2.6, on = !reduceMotion && ph > 0 && ph < 1 && !state.pipes;
+    const top = roofY + 1.5, ph = (it - 1.2) / 2.6, on = !reduceMotion && ph > 0 && ph < 1 && !state.pipes && !showArchitecture;
     scanY = on ? -.3 + (top + .3) * (1 - Math.pow(1 - ph, 2)) : null;
     scan.visible = on;
     if (on) { const a = Math.sin(Math.PI * ph) * (it < 4 ? 1 : .55); scan.position.y = scanY; scan.userData.pl.material.opacity = .55 * a; scan.userData.fr.material.opacity = .95 * a; }
@@ -1540,28 +1676,35 @@ function updateBuilding(t, dt){
     if (isDarkNow) { for (let i = 0; i < DUSTN; i++) { let y = pa.getY(i) + dt * dustV[i]; if (y > 42) y = 0; pa.setY(i, y); } pa.needsUpdate = true; dust.rotation.y = t * .01; } }
   for (const grp of floorGroups) {
     const f = grp.userData.floor, hot = hoverFloor === f;
-    const k = clamp((it - f.index * .22) / 1.1, 0, 1), e = 1 - Math.pow(1 - k, 3);
+    const k = clamp((it - f.index * .22) / 1.1, 0, 1), e = showArchitecture ? 1 : 1 - Math.pow(1 - k, 3);
     const up = explodeF && f.index > explodeF.index;
-    grp.userData.lift = lerp(grp.userData.lift, explodeF ? (up ? 8 + (f.index - explodeF.index) * 6 : f === explodeF ? 1.2 : 0) : hot ? .8 : 0, explodeF ? .07 : .12);
-    grp.userData.fade = lerp(grp.userData.fade, explodeF ? (f === explodeF ? 1 : up ? 0 : .1) : hoverFloor && !hot ? .28 : 1, explodeF ? .08 : .15);
+    grp.userData.lift = lerp(grp.userData.lift, explodeF ? (up ? 8 + (f.index - explodeF.index) * 6 : f === explodeF ? 1.2 : 0) : hot && !showArchitecture ? .8 : 0, explodeF ? .07 : .12);
+    grp.userData.fade = lerp(grp.userData.fade, explodeF ? (f === explodeF ? 1 : up ? 0 : .1) : hoverFloor && !hot && !showArchitecture ? .28 : 1, explodeF ? .08 : .15);
     grp.position.y = floorY(f.index) + grp.userData.lift + (1 - e) * 22;
     const fade = grp.userData.fade * e;
     grp.userData.frame.material.color.set(hot ? (isDarkNow ? 0xe6e6e3 : 0x222222) : 0x8b99ad);
-    grp.userData.frame.material.opacity = (hot ? 1 : .4) * e;
-    grp.userData.mullMat.opacity = (hot ? .45 : .2) * fade;
+    grp.userData.frame.material.opacity = (hot ? 1 : showArchitecture ? .16 : .4) * e;
+    if (grp.userData.mullMat) grp.userData.mullMat.opacity = (hot ? .45 : showArchitecture ? .13 : .2) * fade;   // 지하층은 멀리언 없음
     { // 네온 색·밝기는 목표값으로 천천히 (1초마다 값이 바뀔 때 블룸 때문에 번쩍이지 않게)
       const nm = grp.userData.neon.material, sm = 1 - Math.exp(-dt * 2.5);
       (grp.userData.neonS ||= grp.userData.neonC.clone()).lerp(grp.userData.neonC, sm);
       grp.userData.boost = lerp(grp.userData.boost ?? 1.6, hot || explodeF === f ? 2.4 : 1.6, 1 - Math.exp(-dt * 6));
       nm.color.copy(grp.userData.neonS);
       if (grp.userData.crit) nm.color.lerp(_c.setHex(0xb91c1c), .35 + .45 * pulse);
-      nm.color.multiplyScalar(grp.userData.boost); nm.opacity = (hot || explodeF === f ? 1 : .85) * fade; }
-    grp.userData.planMat.opacity = fade * (state.pipes ? .3 : 1); grp.userData.slabMat.opacity = e * (explodeF ? grp.userData.fade : 1); grp.visible = grp.userData.fade > .01;
+      nm.color.multiplyScalar(grp.userData.boost); nm.opacity = (hot || explodeF === f ? 1 : showArchitecture ? .5 : .85) * fade; }
+    grp.userData.planMat.opacity = fade * (state.pipes ? .3 : showArchitecture && !f.open ? .85 : 1);   // 반투명 외피 안으로 층 평면·방이 보이게
+    grp.userData.planMat.visible = grp.userData.planMat.opacity > .01;
+    grp.userData.slabMat.opacity = e * (explodeF ? grp.userData.fade : showArchitecture && !f.open ? .7 : 1);
+    grp.visible = grp.userData.fade > .01 && (!showArchitecture || !f.below);
+    grp.userData.coreMat.visible = !showArchitecture;
     grp.userData.coreMat.opacity = .92 * fade * (state.pipes ? .3 : 1);
     const blockK = state.pipes ? .18 : 1;
     const grow = clamp((it - f.index * .22 - .6) / .8, 0, 1);
     const sweep = scanY == null ? 0 : 1;
     for (const bk of grp.userData.blocks) {
+      bk.mesh.visible = bk.edges.visible = true;
+      bk.beacon.visible = bk.r.alert.level > 0;
+      bk.beam.visible = bk.r.alert.level === 2;
       if (bk.tc) { bk.mesh.material.color.lerp(bk.tc, .08); bk.mesh.material.emissive.copy(bk.mesh.material.color); bk.edges.material.color.copy(bk.mesh.material.color).lerp(_c.setHex(0xffffff), .55); }
       bk.mesh.scale.y = Math.max(.001, 1 - Math.pow(1 - grow, 3));
       bk.edges.scale.y = bk.mesh.scale.y;
@@ -1580,13 +1723,14 @@ function updateBuilding(t, dt){
   for (const m of hud) { m.rotation.y += dt * m.userData.spd; m.material.opacity = (isDarkNow ? .5 : .35) * clamp(it / 2.5, 0, 1); }
   stars.visible = isDarkNow; starMat.uniforms.uTime.value = t; stars.rotation.y = t * .004;
   scanRings.forEach((m, k) => { const ph = (t * .12 + k * .5) % 1, R = 30 + ph * 55; m.scale.set(R, R, R); m.material.opacity = Math.sin(Math.PI * ph) * (isDarkNow ? .22 : .16); });
-  const roofK = clamp((it - FLOORS.length * .22) / .8, 0, 1);
+  const roofK = showArchitecture ? 1 : clamp((it - FLOORS.length * .22) / .8, 0, 1);
   roofLift = lerp(roofLift, explodeF ? 40 : 0, explodeF ? .06 : .1);
   roof.position.y = (1 - roofK) * 20 + roofLift; roof.visible = roofK > 0 && roofLift < 34;
-  evShaft.visible = evCab.visible = roofK > .99 && !explodeF;
+  evShaft.visible = evCab.visible = roofK > .99 && !explodeF && !showArchitecture;
   { const N = FLOORS.length, cyc = (t * .2) % (2 * (N - 1)), lv = cyc < N - 1 ? cyc : 2 * (N - 1) - cyc, base = Math.floor(lv), e2 = clamp((lv - base - .45) / .55, 0, 1);
     evCab.position.copy(toWorld(evC.x, evC.y, floorY(Math.min(base + e2 * e2 * (3 - 2 * e2), N - 1)) + 1.25)); }
   for (const x of oduObjs) {
+    x.g.visible = !mappedExterior || state.pipes || oduLocations.has(x.o.id);
     const load = x.o.idus.reduce((s, a) => s + (a.status === 'on' ? a.power : 0), 0);
     x.fan.rotation.y += dt * (1 + load * 2.2);
   }
@@ -2102,6 +2246,43 @@ function renderBackdrop(f){
   const v = state.view; state.view = 'building'; updateBuilding(clock.elapsedTime, 0); state.view = v;
   renderPass.scene = bScene; composer.render();
 }
+// 층 보기 3D: 평면도 대신 그 층만 띄운 3D 모델을 비스듬히 (다른 층은 snapExplode로 비켜 있음), 마우스로 돌려 보고 방을 누르면 방 3D로
+let plan3d = false, planAnim = false, planTiltAt = 0, planSeq = 0;   // planAnim: 3D→2D로 돌아가는 동안에도 3D를 계속 그림
+try { plan3d = localStorage.getItem('twin:plan3d') === '1'; } catch {}
+function planTiltCamera(f){
+  const t = new THREE.Vector3(0, floorY(f.index) + 1.2, 0), c = homePos().sub(HOME.target).setY(0).normalize(), k = (Math.max(W, D) * 1.05 + 12) * 1.6;
+  return { pos:t.clone().add(c.multiplyScalar(k * .78)).setY(t.y + k * .72), tgt:t };
+}
+function enterPlan3d(f, animate = true){
+  if (!f) return;
+  const seq = ++planSeq;
+  snapExplode(f); hoverFloor = f; viewShift = 0; if (camera.view && camera.view.enabled) camera.clearViewOffset();
+  controls.enabled = true; controls.autoRotate = false; controls.minDistance = 6; controls.maxDistance = 400 * SC;
+  const pc = planTiltCamera(f);
+  if (animate && !reduceMotion) {
+    // 평면도가 녹아 사라지는 동안(같은 위에서 본 3D라 화면이 그대로) 잠시 머문 뒤, 천천히 기울며 물러남
+    planTiltAt = performance.now() + 260;
+    tween = { update(){} };
+    setTimeout(() => { if (seq === planSeq && plan3d) flyTo(pc.pos, pc.tgt, 1500, null, FOV0); }, 260);
+  } else { planTiltAt = 0; camera.fov = FOV0; camera.updateProjectionMatrix(); camera.position.copy(pc.pos); controls.target.copy(pc.tgt); }
+}
+function setPlan3d(on){
+  if (plan3d === on && !planAnim) return;
+  plan3d = on; if (on) document.body.classList.add('plan3d');
+  try { localStorage.setItem('twin:plan3d', on ? '1' : '0'); } catch {}
+  for (const b of document.querySelectorAll('#planMode button')) b.setAttribute('aria-pressed', String((b.dataset.pm === '3d') === on));
+  if (state.view !== 'floor' || !state.floor) return;
+  if (on) { planAnim = false; enterPlan3d(state.floor); return; }
+  // 3D → 2D: 3D를 켜 둔 채 평면도와 똑같은 위 시점으로 천천히 돌아온 뒤, 그 위로 평면도가 서서히 떠오름
+  const f = state.floor, pc = planCamera(f, planScreenRect(f)), seq = ++planSeq; controls.enabled = false;
+  const land = () => { if (seq !== planSeq || plan3d) return; renderBackdrop(f); document.body.classList.remove('plan3d'); setTimeout(() => { if (seq === planSeq) planAnim = false; }, 600); };
+  if (reduceMotion) { planAnim = false; document.body.classList.remove('plan3d'); renderBackdrop(f); return; }
+  planAnim = true; document.body.classList.add('plan3d');
+  flyTo(pc.pos, pc.tgt, 1300, land, FOV_PLAN);
+}
+document.body.classList.toggle('plan3d', plan3d);
+for (const b of document.querySelectorAll('#planMode button')) b.setAttribute('aria-pressed', String((b.dataset.pm === '3d') === plan3d));
+$('#planMode').addEventListener('click', e => { const b = e.target.closest('[data-pm]'); if (b) setPlan3d(b.dataset.pm === '3d'); });
 function setBodyView(v){ document.body.classList.remove('v-building', 'v-floor', 'v-room'); document.body.classList.add('v-' + v); state.view = v; }
 
 function goBuilding(animate = true){
@@ -2159,6 +2340,7 @@ function goFloor(f){
     if (!seamless) { buildPlanSvg(f); updatePlanSvg(); }
     renderFloorStats(); renderCrumbs(); renderLegend();
     if (!seamless) renderBackdrop(f);
+    if (plan3d) enterPlan3d(f, true);
     emit('twin:view', { view:'floor', floor:f.id });
   };
   if (state.view === 'building' && !reduceMotion) {
@@ -2270,8 +2452,8 @@ function buildPlanSvg(f, intro = false){
   const P = ([x, y]) => `${(p.ox + x*p.S).toFixed(1)},${(p.oy + y*p.S).toFixed(1)}`;
   document.body.classList.toggle('dk', isDark());
   // 평면도 그림을 층 윤곽(footprint)으로 잘라 냄 — 3D 바닥판과 같은 모양 (중정은 비움)
-  const fl = f.footprint?.length >= 3 ? f.footprint : [[0, 0], [W, 0], [W, D], [0, D]];
-  const clipD = 'M' + fl.map(P).join('L') + 'Z' + (f.hasVoid ? 'M' + [[VOID.x0, VOID.y0], [VOID.x1, VOID.y0], [VOID.x1, VOID.y1], [VOID.x0, VOID.y1]].map(P).join('L') + 'Z' : '');
+  const fl = f.footprint || [[[0, 0], [W, 0], [W, D], [0, D]]];
+  const clipD = fl.map(l => 'M' + l.map(P).join('L') + 'Z').join('') + (f.hasVoid ? 'M' + [[VOID.x0, VOID.y0], [VOID.x1, VOID.y0], [VOID.x1, VOID.y1], [VOID.x0, VOID.y1]].map(P).join('L') + 'Z' : '');
   let html = `<defs><clipPath id="planClip"><path clip-rule="evenodd" d="${clipD}"/></clipPath></defs><image href="${isDark() ? p.srcDark : p.src}" x="0" y="0" width="${p.w}" height="${p.h}" clip-path="url(#planClip)"/>`;
   const dly = r => `animation-delay:${(120 + (r.b.cx / W) * 520 + (r.b.cy / D) * 160).toFixed(0)}ms`;
   const RS = f.rooms.filter(r => r.acs.length);
@@ -2953,7 +3135,7 @@ function pick(e){
   const rc = canvas.getBoundingClientRect();
   ndc.set((e.clientX - rc.left) / rc.width * 2 - 1, -(e.clientY - rc.top) / rc.height * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const hit = ray.intersectObjects(pickables, false)[0];
+  const hit = ray.intersectObjects(pickables, false).find(({object}) => object.visible && object.parent.visible && object.material.visible);
   return hit ? hit.object.userData.floor : null;
 }
 canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; controls.autoRotate = false; });
@@ -2965,14 +3147,27 @@ canvas.addEventListener('pointermove', e => {
   f ? showFloorTip(f, e) : hideTip();
 });
 canvas.addEventListener('pointerleave', () => { if (state.view === 'building') { hoverFloor = null; hideTip(); renderFloorPicker(); } });
+function pickRoom(e){
+  const grp = floorGroups.find(g => g.userData.floor === state.floor); if (!grp) return null;
+  const rc = canvas.getBoundingClientRect();
+  ndc.set((e.clientX - rc.left) / rc.width * 2 - 1, -(e.clientY - rc.top) / rc.height * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const meshes = grp.userData.blocks.map(bk => bk.mesh), hit = ray.intersectObjects(meshes, false)[0];
+  return hit ? grp.userData.blocks.find(bk => bk.mesh === hit.object).r : null;
+}
 canvas.addEventListener('pointerup', e => {
+  if (downAt && state.view === 'floor' && plan3d && !tween) {
+    const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]); downAt = null;
+    if (moved < 6) { const r = pickRoom(e); if (r) goRoom(r); }
+    return;
+  }
   if (!downAt || state.view !== 'building') return;
   const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]); downAt = null;
   if (moved < 6) { const f = pick(e); if (f) goFloor(f); }
 });
 
 /* ═════════════════════════ loop / resize / visibility ═════════════════════════ */
-function resize(){ const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); if (state.view === 'floor' && state.floor && typeof renderBackdrop === 'function') renderBackdrop(state.floor); }
+function resize(){ const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); if (state.view === 'floor' && state.floor && !plan3d && !planAnim && typeof renderBackdrop === 'function') renderBackdrop(state.floor); }
 new ResizeObserver(resize).observe(stage); resize();
 let visible = true;
 document.addEventListener('visibilitychange', () => { visible = !document.hidden; });
@@ -2982,7 +3177,7 @@ let viewShift = 0;
 function frame(now){
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), .05);
-  if (!visible || state.view === 'floor') return;
+  if (!visible || (state.view === 'floor' && !plan3d && !planAnim)) return;
   const t = clock.elapsedTime;
   if (tween) tween.update(now);
   controls.update();
@@ -2990,10 +3185,18 @@ function frame(now){
     const nr = clamp(camera.position.distanceTo(controls.target) * .01, .05, 8);
     if (Math.abs(nr - camera.near) > camera.near * .1) { camera.near = nr; camera.updateProjectionMatrix(); } }
   if (state.view === 'building') {
-    const sw = stage.clientWidth, sh = stage.clientHeight, want = explodeF == null && !tween && sw > 760 ? Math.min(340, sw * .3) / 2 : (explodeF == null ? viewShift : 0);
+    // 단독 화면은 왼쪽 패널만큼 모델을 오른쪽으로 비킴. 앱에 넣으면(hosted) 버튼·정보가 앱 쪽에 있으므로 가운데
+    const sw = stage.clientWidth, sh = stage.clientHeight, want = explodeF == null && !tween && sw > 760 && !document.body.classList.contains('hosted') ? Math.min(340, sw * .3) / 2 : (explodeF == null ? viewShift : 0);
     viewShift += (want - viewShift) * .08;
     if (Math.abs(viewShift) < .5 && want === 0) { if (camera.view && camera.view.enabled) camera.clearViewOffset(); viewShift = 0; } else camera.setViewOffset(sw, sh, viewShift, 0, sw, sh);
-    updateBuilding(t, dt); renderPass.scene = bScene; bloom.strength = isDarkNow ? .48 : .22; composer.render(); }
+    updateBuilding(t, dt); renderPass.scene = bScene; bloom.strength = exteriorFirst && !explodeF && !state.pipes ? .035 : isDarkNow ? .48 : .22; composer.render(); }
+  else if (state.view === 'floor' && (plan3d || planAnim)) {   // 층 3D: 건물 화면과 같은 장면을 그 층만 띄워서
+    // 단독 화면은 오른쪽 정보 패널(372px)만큼 모델을 왼쪽으로 비킴(기울기 시작과 함께 천천히), 앱에 넣으면 가운데
+    const sw = stage.clientWidth, sh = stage.clientHeight, want = plan3d && now >= planTiltAt && sw > 760 && !document.body.classList.contains('hosted') ? -186 : 0;
+    viewShift += (want - viewShift) * .05;
+    if (Math.abs(viewShift) < .5 && want === 0) { if (camera.view && camera.view.enabled) camera.clearViewOffset(); viewShift = 0; } else camera.setViewOffset(sw, sh, -viewShift, 0, sw, sh);
+    state.view = 'building'; updateBuilding(t, dt); state.view = 'floor';
+    renderPass.scene = bScene; bloom.strength = isDarkNow ? .48 : .22; composer.render(); }   // 평면도 뒤 배경과 같은 밝기 → 전환 때 번쩍임 없음
   else if (room3d) { if (camera.view && camera.view.enabled) { camera.clearViewOffset(); viewShift = 0; } room3d.update(dt, t); renderPass.scene = room3d.scene; bloom.strength = isDarkNow ? .14 : .06; composer.render(); }
 }
 requestAnimationFrame(frame);
