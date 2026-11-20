@@ -20,7 +20,6 @@ import PowerTrend from './panels/PowerTrend'
 import RecommendPanel from './panels/RecommendPanel'
 import ScheduleTimeline from './panels/ScheduleTimeline'
 import SimPanel from './panels/SimPanel'
-import TwinActions from './panels/TwinActions'
 import TwinTools from './panels/TwinTools'
 import FlowModal from './panels/FlowModal'
 import ExperimentPanel from './panels/ExperimentPanel'
@@ -493,7 +492,6 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
                   onClose={(m) => { setMessages((ms) => ms.map((x) => (x.id === m.id ? { ...x, draftState: 'closed' as const } : x))); setFocus(NO_IDS) }}
                   onFocus={setFocus} onSelect={setSelected}
                 />}
-                {ops && twinOn && report?.actions && <TwinActions actions={report.actions} at={status?.generatedAt} onLocate={locate} />}
                 {ops && floor && <AnomalyPanel building={building} floor={floor} onLocate={(id) => { setMode('anomaly'); locate(id) }} />}
                 {ops && floor && <RecommendPanel key={`${floor}-${scheduleKey}`} building={building} floor={floor} onDraft={showDraft} onLocate={locate} />}
               </aside>
