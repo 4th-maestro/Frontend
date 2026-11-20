@@ -162,3 +162,13 @@ git switch main && git pull --ff-only \
 주: `VITE_TWIN_URL`이 있으면 운영 탭 3D 영역도 트윈 화면(iframe)을 사용합니다. 건물 목록의 `hasTwin`이 false인 건물(2026-11-20 기준 본관, 업무동, 교육관, 연구동)은 트윈 화면을 불러오지 않고 내장 3D 도면을 표시합니다. 판매사가 도면 교체로 트윈 도면을 넣으면 트윈 화면으로 바뀝니다. 배포 후 CloudFront 무효화(`/*`)를 실행하십시오.
 
 `WebBucketName`과 `WebUrl`은 `lambda`의 `sam deploy` 출력값입니다.
+
+
+## 챗봇 자동 운영 초안
+
+챗봇 응답의 `opsDraft`를 자동 운영 수락·거절·되돌리기 초안 카드로 표시합니다. 실행 버튼을 누르면 초안에 고정된 건물·결정 ID로 기존 API를 건별 호출하고 성공·이미 처리됨(409)·실패를 표시합니다. 실행 완료 후 운영 내역·스케줄·호실 상태를 다시 조회합니다. API가 없는 로컬 화면과 지난 대화의 초안은 실행할 수 없습니다.
+
+```sh
+node --experimental-strip-types src/ops/actions.check.mjs
+npm run build
+```
