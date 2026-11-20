@@ -117,7 +117,12 @@ console.log('units.check: 통과')
 
 // 모델 대응(규약 3-5절): 시험용 용량표(정렬 안 됨, 7.2kW만 자체 매뉴얼). 실제 표가 들어와도 시험 결과가 같도록 덮어쓰고 끝에 되돌림
 {
+  // 시험용 용량표: 4방향은 고정 값, 1방향은 비움(실제 표와 무관하게 유형 예시 대체를 점검)
   const t4 = TYPES.find(t => t.class === 'cassette_4way'), saved = t4.models
+  const t1 = TYPES.find(t => t.class === 'cassette_1way'), saved1 = t1.models
+  t1.models = []
+  const td = TYPES.find(t => t.class === 'ceiling_duct'), savedD = { models: td.models, exampleModel: td.exampleModel }
+  td.models = []; td.exampleModel = null
   t4.models = [{ kw: 7.2, model: 'K-72', manual: 'https://m/72' }, { kw: 3.6, model: 'K-36' }, { kw: 5.6, model: 'K-56' }]
   const pick = r => [r.model, r.modelMatch, Boolean(r.review)]
   assert.deepEqual(pick(modelFor('cassette_4way', 7.2)), ['K-72', 'exact', false])
@@ -166,5 +171,7 @@ console.log('units.check: 통과')
   assert.deepEqual([est.source, est.kwSource, est.review, est.model, est.modelMatch], ['estimate', undefined, true, ...pick(modelFor('cassette_4way', est.coolKw)).slice(0, 2)])
   assert.ok(est.coolKw > 0)
   t4.models = saved
+  t1.models = saved1
+  Object.assign(td, savedD)
   console.log('모델 대응 통과')
 }
