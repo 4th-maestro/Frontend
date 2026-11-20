@@ -132,7 +132,13 @@ function Shell({ themeButton, dark }: { themeButton: React.ReactNode; dark: bool
   const known = buildings.find((b) => b.id === route.building)
   // 판매사 건물 추가·수정·삭제·연결 → 목록 다시 조회
   const { reload } = list
-  useEffect(() => { window.addEventListener(BUILDINGS_CHANGED, reload); return () => window.removeEventListener(BUILDINGS_CHANGED, reload) }, [reload])
+  // 건물 등록·수정·삭제 후: 바로 한 번, 4초 뒤 한 번 더 조회(서버 실행 환경이 변경 표시를 확인하는 간격 3초)
+  useEffect(() => {
+    let id = 0
+    const on = () => { reload(); clearTimeout(id); id = window.setTimeout(reload, 4000) }
+    window.addEventListener(BUILDINGS_CHANGED, on)
+    return () => { window.removeEventListener(BUILDINGS_CHANGED, on); clearTimeout(id) }
+  }, [reload])
 
   // 목록 도착 전에는 주소의 건물을 그대로 표시, 목록에 없는 건물만 안내
   if (route.building && (!list.data || known)) {
