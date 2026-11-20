@@ -280,8 +280,8 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
     setSeen(ai.result)
     const r = ai.result
     if (r) {
-      setMessages((ms) => [...ms.map((m) => (m.draftState === 'pending' ? { ...m, draftState: 'closed' as const } : m)),
-        { id: uid(), fresh: true, role: 'assistant', text: r.answer, steps: r.steps, highlight: r.highlight, draft: r.draft, draftState: r.draft ? 'pending' : undefined, mock: r.mock, charts: r.charts, sources: r.sources }])
+      setMessages((ms) => [...ms.map((m) => ({ ...m, opsDraftActive: false, ...(m.draftState === 'pending' ? { draftState: 'closed' as const } : {}) })),
+        { id: uid(), fresh: true, role: 'assistant', text: r.answer, steps: r.steps, highlight: r.highlight, draft: r.draft, draftState: r.draft ? 'pending' : undefined, mock: r.mock, charts: r.charts, sources: r.sources, opsDraft: r.opsDraft, opsDraftActive: !!r.opsDraft }])
       setFocus(r.highlight.length ? r.highlight : NO_IDS)
       if (r.draft && floors.includes(r.draft.floor)) setFloor(r.draft.floor)
     }
@@ -374,7 +374,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   // 추천 초안: 대화에 초안 메시지로 추가(서버 기록 대상 아님)
   function showDraft(d: Draft) {
     reset(); setSeen(null)
-    setMessages((ms) => [...ms.map((m) => (m.draftState === 'pending' ? { ...m, draftState: 'closed' as const } : m)),
+    setMessages((ms) => [...ms.map((m) => ({ ...m, opsDraftActive: false, ...(m.draftState === 'pending' ? { draftState: 'closed' as const } : {}) })),
       { id: uid(), fresh: true, role: 'assistant', text: `최적 제어 추천에서 만든 초안입니다. ${d.roomNames[0]}${d.roomIds.length > 1 ? ` 외 ${d.roomIds.length - 1}곳` : ''}이 대상입니다.`, draft: d, draftState: 'pending', highlight: d.roomIds }])
     setFocus(d.roomIds)
   }
@@ -387,7 +387,7 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
     if (w && w.roomIds.length) {
       reset(); setSeen(null)
       whatIfs.current.set(w.id, w)
-      setMessages((ms) => [...ms.map((m) => (m.draftState === 'pending' ? { ...m, draftState: 'closed' as const } : m)),
+      setMessages((ms) => [...ms.map((m) => ({ ...m, opsDraftActive: false, ...(m.draftState === 'pending' ? { draftState: 'closed' as const } : {}) })),
         { id: w.id, fresh: true, role: 'assistant', text: pendingText(w), highlight: w.roomIds }])
       setFocus(w.roomIds)
       if (w.floor !== 'all' && floors.includes(w.floor)) setFloor(w.floor)
@@ -511,6 +511,10 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
                 {sim && twinOn && <SimPanel frame={() => frame.current} onLocate={locate} />}
                 {sim && import.meta.env.DEV && building === 'eng6' && <ExperimentPanel />}
                 {ops && <ChatPanel
+                  onOpsDone={(m, notice) => {
+                    setMessages((ms) => ms.map((x) => x.id === m.id ? { ...x, opsDraftActive: false, opsDraftResult: notice } : x))
+                    opsPoll.reload(); setScheduleKey((k) => k + 1); load()
+                  }}
                   ops={opsData && { overview: opsData, canToggle, busy: opsBusy, notice: opsNotice, onAct: opsAct, onToggle: opsToggle, onLocate: (id) => { setFocus([id]); locate(id) } }}
                   ai={ai} messages={messages} rooms={rooms} suggestions={suggestions} busy={busy} history={history}
                   onSend={send} onClear={clear} onSave={save}
