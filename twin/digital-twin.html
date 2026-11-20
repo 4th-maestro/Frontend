@@ -3775,7 +3775,7 @@ function tellHost(type, payload){ if (!HOST.on || HOST.applying) return; emit(ty
 function hostReport(force){
   if (!HOST.on || !hostReady()) return;
   const floors = FLOORS.map(f => { const acs = f.rooms.flatMap(r => r.acs);
-    return { floor:f.id, total:acs.length, on:acs.filter(a => a.status === 'on').length, anomaly:f.rooms.filter(r => r.alert.level).length, powerKw:+f.rooms.reduce((t, r) => t + r.power, 0).toFixed(1) }; });
+    return { floor:f.id, total:acs.length, on:acs.filter(a => a.status === 'on').length, anomaly:f.rooms.filter(r => r.acs.some(x => x.status === 'fault')).length, caution:f.rooms.filter(r => r.alert.level && !r.acs.some(x => x.status === 'fault')).length, powerKw:+f.rooms.reduce((t, r) => t + r.power, 0).toFixed(1) }; });
   const sig = JSON.stringify(floors), now = performance.now();
   if (!force && (sig === HOST.sig || now - (HOST.at || 0) < 3000)) return;
   HOST.sig = sig; HOST.at = now;
