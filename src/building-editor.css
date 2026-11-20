@@ -9,6 +9,8 @@
 .edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .building-edit > header .edit-actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 .building-edit > header .edit-actions .pill { height: 48px; }
+/* 편집 도구 줄: 같은 너비(가장 긴 라벨 기준), 좁은 화면은 줄바꿈 */
+.edit-work > .edit-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
 .edit-actions .primary { height: 48px; padding: 0 20px; font-size: 16px; }
 .edit-actions .building-delete { border-color: var(--danger); color: var(--danger); }
 .building-edit .pill:disabled, .edit-actions .pill:disabled { border-color: var(--border-strong); background: var(--surface-strong); color: var(--muted); }
