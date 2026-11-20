@@ -513,6 +513,7 @@
 
 <script type="module">
 import * as THREE from 'three';
+import { iduFields, iduShape } from './pipeline/idu-shapes.js';   // 실내기 유형(cls)별 3D 형상
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -686,7 +687,7 @@ const FLOORS = BD.floors.map((f, fi) => ({ id:f.id, index:fi, plan:null, hasVoid
   rooms:f.rooms.map(r => ({ id:r.id, floorId:f.id, floorIndex:fi, name:r.name, num:r.number || null, type:r.type || 'room', poly:r.holes?.length ? Object.assign([...r.polygon], { holes:r.holes }) : r.polygon,
     kind:r.use || (r.type === 'room' || !r.type ? 'office' : 'none'), cap:r.capacity || 0, finish:r.finish || null, zoneOf:r.zoneOf || null, zoneBasis:r.zoneBasis || null,
     acs:(IDU_BY_ROOM[r.id] || []).map(a => ({ id:a.id, addr:a.ctrlAddr, x:a.pos[0], y:a.pos[1], model:a.model || '실내기', type:a.type || '', cool:a.coolKw || 7.2, rated:a.ratedKw || 2.2, odu:a.odu,
-      ways:/1\s*WAY/i.test((a.type || '') + (a.model || '')) ? 1 : 4 })) })) }));
+      ...iduFields(a) })) })) }));
 const ROOMS = FLOORS.flatMap(f => f.rooms);
 const FLOOR_FOOT = Object.fromEntries(FLOORS.map(f => [f.id, f.footprint]));
 const ROOM = Object.fromEntries(ROOMS.map(r => [r.id, r]));
@@ -1643,6 +1644,8 @@ function buildRoom(r, held = false){
   const longX = b.w >= b.h;
   const casMat = new THREE.MeshStandardMaterial({ color:0xf6f8fb, roughness:.32, metalness:.04 });
   const acObjs = r.acs.map((a, ai) => {
+    const shaped = iduShape(THREE, a, { at:toWorld, ceil:CEIL, room:b, mat:casMat });   // cls가 있으면 유형별 형상, 없으면 아래 카세트
+    if (shaped) { root.add(shaped.g); return { a, ...shaped, phase:ai * 1.9 + hash(a.id) * 6, phi:40 }; }
     const ways = a.ways || 4;
     const dirs = ways === 4 ? [[1, 0], [0, 1], [-1, 0], [0, -1]]
       : [longX ? [Math.sign((b.cx - a.x) || 1), 0] : [0, Math.sign((b.cy - a.y) || 1)]];
