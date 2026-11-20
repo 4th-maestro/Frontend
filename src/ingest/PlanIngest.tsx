@@ -3,6 +3,7 @@ import { Circle, CircleAlert, CircleCheck, LoaderCircle, Upload } from 'lucide-r
 import BuildingEditor from '../BuildingEditor'
 import type { Plan } from '../floor-edit'
 import { onBuildingRendered, pipelineSrc } from '../twin'
+import ConvertProgress from './ConvertProgress'
 import { ACCEPT, API_ON, convertFiles, detect, kindOf, pageFiles, saveTwin, type Convert, type Job, type Page } from './api'
 import { detectingSrc, onDetectRequest, sendPlans } from './bridge'
 import { applyDetections, asPlan, pendingDetections, reviewDoors, reviewUnits } from './units'
@@ -14,6 +15,8 @@ import './ingest.css'
 // - 파이프라인은 보정 평면도마다 기호 인식을 요청(detectRequest) → 이 화면이 보정 이미지를 1쪽 PDF로 바꿔 pdf 작업(렌더링 → 인식 모델)으로 처리
 // - 확정: onConfirm이 있으면 호출한 화면이 저장(판매사 건물 화면), 없으면 saveTwin(buildingId, twin, convert) 후 onDone(twin)
 const STEPS = [['parse', '파일 해석'], ['detect', '실내기 인식'], ['merge', '병합']] as const
+// 진행률 단계별 예상 시간(초): 업로드(초당 4MB) + 종류별 해석·인식·병합(ConvertProgress 주석의 실측 기준, PDF 인식은 2쪽 가정)
+const EST: Record<string, [number, number, number]> = { ifc: [16, 2, 3], cad: [12, 2, 3], pdf: [12, 44, 5] }
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export default function PlanIngest({ buildingId, onDone, onConfirm, convert }: { buildingId: string; onDone(twin: Plan): void; onConfirm?(twin: Plan): void; convert?: Convert }) {
@@ -124,6 +127,12 @@ export default function PlanIngest({ buildingId, onDone, onConfirm, convert }: {
           {files.length > 0 && <ul className="ingest-files" aria-label="고른 파일">
             {files.map(f => <li key={f.name}>{f.name} ({(f.size / 1048576).toFixed(1)} MB)</li>)}
           </ul>}
+          {(busy || job) && kind && kind !== 'image' && (() => {
+            const est = EST[kind] ?? EST.pdf, mb = files.reduce((s, f) => s + f.size, 0) / 1048576
+            const steps = [{ id: 'upload', label: '업로드', sec: Math.max(1, Math.round(mb / 4)) }, ...STEPS.map(([id, label], i) => ({ id, label, sec: est[i] }))]
+            const state = job?.status === 'failed' ? 'failed' : job && at >= STEPS.length ? 'done' : 'running'
+            return <ConvertProgress steps={steps} at={job ? Math.min(at + 1, steps.length - 1) : 0} state={state} />
+          })()}
           {job && <ol className="ingest-steps" aria-label="변환 단계">
             {STEPS.map(([id, label], i) => {
               const failed = job.status === 'failed' && i === at
