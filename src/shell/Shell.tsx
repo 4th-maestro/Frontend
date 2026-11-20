@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { AlertTriangle, BarChart3, Building2, CheckCircle2, ChevronDown, LayoutDashboard, LogOut, Menu, Plus, UserCog, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, Briefcase, Building2, CheckCircle2, ChevronDown, LayoutDashboard, LogOut, Menu, Plus, Settings, X } from 'lucide-react'
 import { addCustom, buildingsChanged } from '../custom'
 import { AUTH_ON, currentEmail, isAdmin, signOut } from '../auth/cognito'
+import { MeContext, ROLE } from '../auth/me'
 import { LEVEL } from '../portfolio/level'
 import type { BuildingCard } from '../types'
 import logo from '../../assets/ege.svg'
@@ -14,10 +15,11 @@ import CountUp from '../motion/CountUp'
 
 // 화면 틀: 상단바(로고, 건물 토글, 운영·전력 분석 탭, 오른쪽 도구) + 왼쪽 사이드바(전체 현황, 층) + 본문
 // - 사이드바: 743px 이하에서 숨기고 상단바 메뉴 버튼으로 여닫음
-export function Layout({ building, tab, buildings, tools, side, admin, children }: {
-  building: string | null; tab: Tab; buildings: BuildingCard[]; tools: ReactNode; side?: ReactNode; admin?: boolean; children: ReactNode
+export function Layout({ building, tab, buildings, tools, side, admin, settings, children }: {
+  building: string | null; tab: Tab; buildings: BuildingCard[]; tools: ReactNode; side?: ReactNode; admin?: boolean; settings?: boolean; children: ReactNode
 }) {
   const [drawer, setDrawer] = useState(false)
+  const me = useContext(MeContext)
   // 주소(건물·층·탭) 변경 시 열린 메뉴 닫기
   useEffect(() => {
     const close = () => setDrawer(false)
@@ -46,15 +48,32 @@ export function Layout({ building, tab, buildings, tools, side, admin, children 
       </header>
       <div className="body">
         <aside id="side" className={drawer ? 'side open' : 'side'} aria-label="이동">
-          <a className={building || admin ? 'side-link' : 'side-link on'} href="#/" aria-current={building || admin ? undefined : 'page'} onClick={() => setDrawer(false)}>
+          <a className={building || admin || settings ? 'side-link' : 'side-link on'} href="#/" aria-current={building || admin || settings ? undefined : 'page'} onClick={() => setDrawer(false)}>
             <LayoutDashboard size={20} aria-hidden />전체 현황
           </a>
           {side}
-          {/* 관리자 메뉴: 표시만 ID 토큰 그룹 기준, 권한은 admin API가 판정 */}
-          {AUTH_ON && isAdmin() && (
-            <a className={admin ? 'side-link on side-admin' : 'side-link side-admin'} href="#/admin" aria-current={admin ? 'page' : undefined} onClick={() => setDrawer(false)}>
-              <UserCog size={20} aria-hidden />사용자 관리
-            </a>
+          {AUTH_ON && (
+            <div className="side-foot">
+              {/* 고객사 소속: GET /me의 기업 이름과 역할 */}
+              {me?.company && (
+                <p className="side-me">
+                  <Building2 size={20} aria-hidden />
+                  <span>{me.company.name}<small>{me.role ? ROLE[me.role] : ''}</small></span>
+                </p>
+              )}
+              {/* 고객사 기업 설정: 판매사 관리자는 기업 관리 사용 */}
+              {me?.company && me.role !== 'admin' && (
+                <a className={settings ? 'side-link on' : 'side-link'} href="#/settings" aria-current={settings ? 'page' : undefined} onClick={() => setDrawer(false)}>
+                  <Settings size={20} aria-hidden />기업 설정
+                </a>
+              )}
+              {/* 관리자 메뉴: 표시는 ID 토큰 그룹 또는 GET /me 역할 기준, 권한은 admin API가 판정 */}
+              {(isAdmin() || me?.role === 'admin') && (
+                <a className={admin ? 'side-link on' : 'side-link'} href="#/admin" aria-current={admin ? 'page' : undefined} onClick={() => setDrawer(false)}>
+                  <Briefcase size={20} aria-hidden />기업 관리
+                </a>
+              )}
+            </div>
           )}
         </aside>
         {drawer && <div className="scrim" onClick={() => setDrawer(false)} aria-hidden />}

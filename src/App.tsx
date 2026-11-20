@@ -4,9 +4,11 @@ import AdminPage from './admin/AdminPage'
 import ChatPanel, { type ChatMsg } from './ai/ChatPanel'
 import type { AskResult } from './ai/types'
 import { useAsk } from './ai/useAsk'
-import { clearChat, getBuildings, getChat, getStatus, saveSchedule } from './api'
-import LoginScreen from './auth/LoginScreen'
-import { onAuthChange, signedIn } from './auth/cognito'
+import { clearChat, getBuildings, getChat, getMe, getStatus, joinCompany, saveSchedule, SUSPENDED, type Me } from './api'
+import LoginScreen, { NoCompany, Suspended } from './auth/LoginScreen'
+import { AUTH_ON, currentEmail, isAdmin, onAuthChange, signedIn } from './auth/cognito'
+import { ME_CHANGED, MeContext } from './auth/me'
+import SettingsPage from './settings/SettingsPage'
 import BuildingCompare from './energy/BuildingCompare'
 import EnergyPage from './energy/EnergyPage'
 import { SCALES } from './heat'
@@ -47,6 +49,8 @@ const NO_ROOMS: Room[] = []
 const NO_IDS: string[] = []
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
+const STOPPED = '서비스가 중지된 기업입니다. 판매사에 문의하십시오.'
+
 // 테마: index.html 인라인 스크립트가 첫 표시 전에 data-theme 지정, 여기서는 전환과 저장만 처리
 type Theme = 'light' | 'dark'
 function saveTheme(t: Theme) {
@@ -59,13 +63,46 @@ export default function App() {
   // 로그인 상태: 로그아웃·토큰 갱신 실패 시 로그인 화면으로 전환
   const [authed, setAuthed] = useState(signedIn)
   useEffect(() => onAuthChange(() => setAuthed(signedIn())), [])
+  // 소속 확인: 로그인 후 GET /me, 구성원 변경(ME_CHANGED) 시 다시 조회, 로그아웃하면 초기화
+  // - 조회 실패(API 없음·오류)는 확인을 생략하고 건물 화면 유지(목업 동작 보존)
+  const [me, setMe] = useState<Me | null>(null)
+  // 서비스 중지: API 403 COMPANY_SUSPENDED의 서버 문구
+  const [stopped, setStopped] = useState('')
+  useEffect(() => {
+    if (!authed || !AUTH_ON) return
+    let alive = true
+    const load = () => getMe().then((m) => { if (alive) setMe(m) }, () => undefined)
+    const stop = (e: Event) => setStopped((e as CustomEvent<string | undefined>).detail || STOPPED)
+    load()
+    window.addEventListener(ME_CHANGED, load)
+    window.addEventListener(SUSPENDED, stop)
+    return () => {
+      alive = false; setMe(null); setStopped('')
+      window.removeEventListener(ME_CHANGED, load)
+      window.removeEventListener(SUSPENDED, stop)
+    }
+  }, [authed])
   if (!authed) return <LoginScreen onDone={() => setAuthed(true)} />
+  // 판매사 관리자는 기업 상태와 무관하게 건물 화면·기업 관리 사용
+  const vendor = me?.role === 'admin' || isAdmin()
+  if (!vendor && (stopped || me?.company?.status === 'suspended')) {
+    return <Suspended email={me?.email ?? currentEmail()} company={me?.company?.name} message={stopped || STOPPED} />
+  }
+  if (me && !me.role && !vendor) {
+    // 연결 후 소속 다시 조회, 조회 실패·소속 미반영이면 연결 응답으로 진입
+    const join = async (code: string) => {
+      const r = await joinCompany(code)
+      const m = await getMe().catch(() => null)
+      setMe(m?.role ? m : { email: me.email, ...r })
+    }
+    return <NoCompany email={me.email} onJoin={join} />
+  }
   const themeButton = (
     <button className="icon" onClick={() => { const t = theme === 'dark' ? 'light' : 'dark'; setTheme(t); saveTheme(t) }} aria-label={theme === 'dark' ? '밝은 화면으로 전환' : '어두운 화면으로 전환'}>
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
     </button>
   )
-  return <Shell themeButton={themeButton} dark={theme === 'dark'} />
+  return <MeContext value={me}><Shell themeButton={themeButton} dark={theme === 'dark'} /></MeContext>
 }
 
 function Shell({ themeButton, dark }: { themeButton: React.ReactNode; dark: boolean }) {
@@ -99,7 +136,14 @@ function Shell({ themeButton, dark }: { themeButton: React.ReactNode; dark: bool
   if (route.admin) {
     return (
       <Layout building={null} tab="ops" buildings={buildings} tools={themeButton} admin>
-        <div className="page"><AdminPage /></div>
+        <div className="page"><AdminPage company={route.company} /></div>
+      </Layout>
+    )
+  }
+  if (route.settings) {
+    return (
+      <Layout building={null} tab="ops" buildings={buildings} tools={themeButton} settings>
+        <div className="page"><SettingsPage /></div>
       </Layout>
     )
   }
@@ -118,7 +162,8 @@ type DashboardProps = { building: string; info?: BuildingCard; tab: Tab; buildin
 
 function Dashboard({ building, info, tab, buildings, themeButton, dark }: DashboardProps) {
   const ops = tab === 'ops'
-  const [floor, setFloor] = useState('')
+  // 내장 3D 도면은 층 단위로만 그리므로 트윈 화면(TWIN_URL)이 없으면 첫 층으로 시작, 트윈은 건물 전체('')로 시작
+  const [floor, setFloor] = useState(TWIN_URL ? '' : (info?.floors[0] ?? '1F'))
   const [mode, setMode] = useState<Mode>('temp')
   const [status, setStatus] = useState<Status | null>(null)
   const [error, setError] = useState('')
@@ -170,6 +215,8 @@ function Dashboard({ building, info, tab, buildings, themeButton, dark }: Dashbo
   useEffect(() => onTwinChange({ mode: setMode, building: setTwin, floor: (f) => { if (!f || floors.includes(f)) { setFloor(f); setSelected(null) } } }), [floors])
   // 선택된 층이 현재 건물의 층 목록에서 사라지면 건물 보기로 돌아감
   if (status && floor && !floors.includes(floor)) setFloor('')
+  // 트윈 화면이 없으면 빈 층(새로고침 직후 빈 도면) 대신 첫 층 표시
+  if (!TWIN_URL && !floor && floors.length) setFloor(floors[0])
   // 새 AI 결과: 대화에 추가, 이전 초안 닫기, 대상 호실 강조, 초안 대상 층으로 이동
   if (ai.result !== seen) {
     setSeen(ai.result)
