@@ -55,7 +55,8 @@ export function useDoorTool({ model, commit, level, current, tool, tolerance, sa
   })
 
   function down(p: Point) {
-    const hit = doors.filter(d => gap(p, d) < Math.max(tolerance, width(d) / 2)).sort((x, y) => gap(p, x) - gap(p, y))[0]
+    // 문 기호(문짝과 호)가 벽에서 문 폭만큼 나오므로 문 폭 거리까지 선택
+    const hit = doors.filter(d => gap(p, d) <= Math.max(tolerance, width(d))).sort((x, y) => gap(p, x) - gap(p, y))[0]
     if (hit) { setSel(hit.id); setDrag({ id: hit.id, from: p, pos: p }); return }
     const seg = snapDoor(current.rooms, p, .9, tolerance)
     if (!seg) { if (sel) setSel(''); else say('문을 추가할 벽 가까이를 누르십시오.'); return }
