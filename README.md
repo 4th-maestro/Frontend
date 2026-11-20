@@ -29,7 +29,7 @@
 | `src/panels/` | 운영 패널 4종: 최적 제어 추천, 이상 감지, 오늘 스케줄(세로 시간표: 시작 시각부터 그날 끝까지 칸, 지금 선, 칸 선택 시 상세와 취소, 층 선택 버튼으로 층별 보기), 전력 추이(오늘·어제 SVG 그래프). 60초마다 다시 조회 |
 | `src/energy/` | 에너지 분석: `BuildingCompare`(건물별 kWh·1㎡당·전기요금 막대), `EnergyPage`(일·주·월 추이, 사용 구성 흐름도, 최근 4주 요일×시간 히트맵). API 실패 시 `mock.ts` 목업([설계](../docs/human/explanation/architecture.md) 11절) |
 | `src/panels/mock.ts` | 운영 패널·전체 현황 목업: 데모 상태 기반 추천·이상 감지·전력 곡선, 건물별 브라우저 메모리 스케줄 저장소 |
-| `src/BuildingEditor.tsx` | 평면도 편집: 방 이름, 벽 설치, 벽 삭제, 벽 이동, 칸막이, 실내기(`src/ingest/UnitTool.tsx`), 도면 위치 맞춤, 실행 취소 |
+| `src/BuildingEditor.tsx` | 평면도 편집: 방 이름, 벽 설치, 벽 삭제, 벽 이동, 칸막이, 실내기(`src/ingest/UnitTool.tsx`), 위치 맞춤, 실행 취소 |
 | `src/ingest/PlanIngest.tsx` | 도면 업로드, 2D 실내기 매핑, 확정 저장 진입 컴포넌트(판매사 건물 화면에서 사용). 입력 IFC, DXF, DWG, PDF, PNG, JPG |
 | `src/ingest/api.ts` | 도면 변환 API(작업 생성, S3 업로드, 시작, 3초 상태 조회), 기호 인식, 확정 저장 어댑터 `saveTwin` |
 | `src/ingest/UnitTool.tsx` | 실내기 도구(유형 6종 추가, 끌어서 이동, 삭제, 유형 변경, 확인 필요 목록)와 도면 위치 맞춤(기준점 2쌍) |
@@ -99,7 +99,7 @@ npm run dev
 | PNG, JPG | 고른 파일을 트윈 파이프라인에 넣음(`plans` 메시지) | 파이프라인 결과 |
 
 - 파이프라인은 보정 평면도마다 기호 인식을 요청하고(`detectRequest`), 대시보드가 `POST /plans/detect`로 처리합니다. 메시지 목록은 [twin/README.md](twin/README.md) "호스트 연동 메시지"에 있습니다.
-- 2D 매핑 화면은 평면도 편집의 **실내기**와 **도면 위치 맞춤** 도구입니다. 위치 맞춤은 도면 이미지 점 2개와 평면 점 2개로 회전, 축척, 이동을 구하고, 위치를 맞추지 않은 인식 결과(`floors[].detections`)를 실내기로 바꿉니다.
+- 2D 매핑 화면은 평면도 편집의 **실내기**와 **위치 맞춤** 도구입니다. 위치 맞춤은 도면 이미지 점 2개와 평면 점 2개로 회전, 축척, 이동을 구하고, 위치를 맞추지 않은 인식 결과(`floors[].detections`)를 실내기로 바꿉니다.
 - 확정 저장은 `saveTwin(buildingId, twin, convert)`입니다. 호출 쪽이 변환 함수(`src/admin/convert.ts`)를 넘기면 `PUT /buildings/{id}/twin` `{twin, rooms, plan}`, 없으면 이 브라우저에만 저장합니다(데모).
 - `VITE_API_BASE_URL`이 없으면 IFC, CAD, PDF 변환과 기호 인식은 동작하지 않고, PNG, JPG만 파이프라인으로 처리합니다.
 

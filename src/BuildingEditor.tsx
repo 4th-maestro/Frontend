@@ -13,7 +13,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'cut', label: '부분 삭제', hint: '같은 벽의 시작점과 끝점을 찍어 그 구간만 엽니다.' },
   { id: 'partition', label: '부분 생성', hint: '두 점으로 칸막이를 만듭니다. 점선이 뜨면 수직·수평으로 맞춰지고, 열린 벽선 위를 찍으면 벽을 복원합니다.' },
   { id: 'unit', label: '실내기', hint: '추가할 유형을 고른 뒤 방 안을 누르십시오. 실내기를 누르면 선택되고, 끌어서 옮길 수 있습니다.' },
-  { id: 'align', label: '도면 위치 맞춤', hint: '도면 이미지의 기준점 2개를 누른 뒤, 평면도에서 같은 위치 2개를 누르십시오.' },
+  { id: 'align', label: '위치 맞춤', hint: '도면 이미지의 기준점 2개를 누른 뒤, 평면도에서 같은 위치 2개를 누르십시오.' },
 ]
 const pathOf = (room: PlanRoom) => [room.polygon, ...(room.holes ?? [])].map(loop => 'M' + loop.map(p => p.join(',')).join('L') + 'Z').join(' ')
 const wallPathOf = (room: PlanRoom, openings: Opening[]) => [room.polygon, ...(room.holes ?? [])]

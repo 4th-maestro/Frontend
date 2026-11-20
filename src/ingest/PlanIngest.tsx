@@ -12,11 +12,11 @@ import './ingest.css'
 // - IFC, DXF, DWG: 서버 변환 초안(draftUrl)을 바로 편집, 렌더링한 도면(pages)은 층별 배경 이미지
 // - PDF: 서버가 렌더링한 페이지를, PNG, JPG: 고른 파일을 트윈 파이프라인(iframe)에 넣어 호실을 만들고, 파이프라인 결과를 편집
 // - 파이프라인은 보정 평면도마다 기호 인식을 요청(detectRequest) → 이 화면이 POST /plans/detect로 처리, 보정 이미지는 배경 이미지
-// - 확정: saveTwin(buildingId, twin, convert) 후 onDone(twin). convert가 없으면 이 브라우저 데모 저장
-const STEPS = [['parse', '파일 해석'], ['render', '도면 이미지 생성'], ['detect', '실내기 인식'], ['merge', '병합']] as const
+// - 확정: onConfirm이 있으면 호출한 화면이 저장(판매사 건물 화면), 없으면 saveTwin(buildingId, twin, convert) 후 onDone(twin)
+const STEPS = [['parse', '파일 해석'], ['detect', '실내기 인식'], ['merge', '병합']] as const
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export default function PlanIngest({ buildingId, onDone, convert }: { buildingId: string; onDone(twin: Plan): void; convert?: Convert }) {
+export default function PlanIngest({ buildingId, onDone, onConfirm, convert }: { buildingId: string; onDone(twin: Plan): void; onConfirm?(twin: Plan): void; convert?: Convert }) {
   const [files, setFiles] = useState<File[]>([])
   const [job, setJob] = useState<Job | null>(null)
   const [busy, setBusy] = useState(false)
@@ -86,6 +86,7 @@ export default function PlanIngest({ buildingId, onDone, convert }: { buildingId
     if (saving.current) return
     const n = reviewUnits(plan).length, d = pendingDetections(plan)
     if ((n || d) && !window.confirm(`확인 필요 실내기 ${n}대${d ? `, 위치를 맞추지 않은 인식 결과 ${d}개` : ''}가 남아 있습니다. 이대로 저장할까요?`)) return
+    if (onConfirm) { onConfirm(plan); return }
     saving.current = true
     setError('')
     try {
